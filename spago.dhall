@@ -11,7 +11,18 @@ When creating a new Spago project, you can use
 to generate this file without the comments in this block.
 -}
 { name = "kafkajs"
-, dependencies = [ "console", "effect", "prelude" ]
+, dependencies =
+    [ "aff"
+    , "console"
+    , "effect"
+    , "either"
+    , "foldable-traversable"
+    , "integers"
+    , "node-child-process"
+    , "prelude"
+    , "tailrec"
+    , "transformers"
+    ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
 }
