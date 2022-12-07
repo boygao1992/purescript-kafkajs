@@ -140,5 +140,5 @@ waitForKafkaInstance containerName = do
     containerName <> " is ready"
   where
   retryLimit :: Int
-  retryLimit = 10
+  retryLimit = 30
 
