@@ -11,6 +11,7 @@ import Effect (Effect)
 import Effect.Aff as Effect.Aff
 import Effect.Class as Effect.Class
 import Effect.Class.Console as Effect.Class.Console
+import Effect.Exception as Effect.Exception
 import Node.ChildProcess as Node.ChildProcess
 
 -- | `checkIfKafkaInstanceIsReady` throws an exception if not ready (either `docker-compose logs` or `grep` fails)
@@ -64,7 +65,7 @@ docker-compose \
 """
 
 main :: Effect Unit
-main = Effect.Aff.runAff_ (\_ -> pure unit) do
+main = Effect.Aff.runAff_ reraiseException do
   Effect.Aff.bracket acquire release \_ -> do
     pure unit
   where
@@ -72,6 +73,12 @@ main = Effect.Aff.runAff_ (\_ -> pure unit) do
   acquire = Effect.Class.liftEffect do
     dockerComposeUp
     waitForKafka
+
+  reraiseException :: forall a. Data.Either.Either Effect.Aff.Error a -> Effect Unit
+  reraiseException = case _ of
+    Data.Either.Left error -> do
+      Effect.Exception.throwException error
+    Data.Either.Right _ -> pure unit
 
   release :: Unit -> Effect.Aff.Aff Unit
   release _ = Effect.Class.liftEffect do
