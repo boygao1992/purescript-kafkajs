@@ -67,12 +67,12 @@ docker-compose \
 main :: Effect Unit
 main = Effect.Aff.runAff_ reraiseException do
   Effect.Aff.bracket acquire release \_ -> do
+    Effect.Class.liftEffect waitForKafka
     pure unit
   where
   acquire :: Effect.Aff.Aff Unit
   acquire = Effect.Class.liftEffect do
     dockerComposeUp
-    waitForKafka
 
   reraiseException :: forall a. Data.Either.Either Effect.Aff.Error a -> Effect Unit
   reraiseException = case _ of
