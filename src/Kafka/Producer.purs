@@ -4,16 +4,19 @@ module Kafka.Producer
   , Producer
   , ProducerBatch
   , ProducerConfig
+  , ProducerRecord
   , RecordMetadata
   , TopicMessages
   , Value(..)
   , producer
+  , send
   , sendBatch
   ) where
 
 import Prelude
 
 import Control.Promise as Control.Promise
+import Data.Array as Data.Array
 import Data.DateTime.Instant as Data.DateTime.Instant
 import Data.Maybe as Data.Maybe
 import Data.Nullable as Data.Nullable
@@ -107,6 +110,12 @@ type ProducerConfig =
 type ProducerConfigImpl =
   {}
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L729
+type ProducerRecord =
+  { messages :: Array Message
+  , topic :: String
+  }
+
 type RecordMetadata =
   { baseOffset :: Data.Maybe.Maybe String
   , errorCode :: Int
@@ -186,6 +195,20 @@ producer kafka config =
   where
   toProducerConfigImpl :: ProducerConfig -> ProducerConfigImpl
   toProducerConfigImpl x = x
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/producer/messageProducer.js#L118
+-- |
+-- | NOTE logic is very simple so instead of FFI we rewrite in PS
+send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
+send producer' x = sendBatch producer'
+  { topicMessages: Data.Array.singleton topicMessages
+  }
+  where
+  topicMessages :: TopicMessages
+  topicMessages =
+    { messages: x.messages
+    , topic: x.topic
+    }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L776
 -- |
