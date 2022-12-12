@@ -9,6 +9,7 @@ module Kafka.Producer
   , TopicMessages
   , Value(..)
   , connect
+  , disconnect
   , producer
   , send
   , sendBatch
@@ -192,6 +193,19 @@ connect :: Producer -> Effect.Aff.Aff Unit
 connect producer' =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn1 _connect producer'
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L789
+-- |
+-- | `disconnect(): Promise<void>`
+foreign import _disconnect ::
+  Effect.Uncurried.EffectFn1
+    Producer
+    (Control.Promise.Promise Unit)
+
+disconnect :: Producer -> Effect.Aff.Aff Unit
+disconnect producer' =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn1 _disconnect producer'
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L11
 -- |
