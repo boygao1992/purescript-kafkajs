@@ -2,6 +2,7 @@ module Kafka.Consumer
   ( Consumer
   , ConsumerConfig
   , Topic(..)
+  , connect
   , consumer
   , subscribe
   ) where
@@ -77,6 +78,19 @@ type ConsumerSubscribeTopicImpl =
 data Topic
   = TopicName String
   | TopicRegex Data.String.Regex.Regex
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1033
+-- |
+-- | `connect(): Promise<void>`
+foreign import _connect ::
+  Effect.Uncurried.EffectFn1
+    Consumer
+    (Control.Promise.Promise Unit)
+
+connect :: Consumer -> Effect.Aff.Aff Unit
+connect consumer' =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn1 _connect consumer'
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L12
 -- |
