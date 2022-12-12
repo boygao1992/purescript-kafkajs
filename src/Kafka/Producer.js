@@ -1,5 +1,9 @@
 "use strict";
 
+exports._connect = function _connect(producer) {
+  return producer.connect();
+};
+
 exports._producer = function _producer(kafka, config) {
   return kafka.producer(config);
 };

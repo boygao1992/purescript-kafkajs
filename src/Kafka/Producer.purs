@@ -8,6 +8,7 @@ module Kafka.Producer
   , RecordMetadata
   , TopicMessages
   , Value(..)
+  , connect
   , producer
   , send
   , sendBatch
@@ -178,6 +179,19 @@ data Value
 type ValueImpl =
   Node.Buffer.Buffer
     Untagged.Union.|+| String
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L788
+-- |
+-- | `connect(): Promise<void>`
+foreign import _connect ::
+  Effect.Uncurried.EffectFn1
+    Producer
+    (Control.Promise.Promise Unit)
+
+connect :: Producer -> Effect.Aff.Aff Unit
+connect producer' =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn1 _connect producer'
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L11
 -- |
