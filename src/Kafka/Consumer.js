@@ -8,6 +8,10 @@ exports._consumer = function _consumer(kafka, config) {
   return kafka.consumer(config);
 };
 
+exports._disconnect = function _connect(consumer) {
+  return consumer.disconnect();
+};
+
 exports._subscribe = function _subscribe(consumer, subscription) {
   return consumer.subscribe(subscription);
 };

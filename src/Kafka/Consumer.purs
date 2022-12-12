@@ -4,6 +4,7 @@ module Kafka.Consumer
   , Topic(..)
   , connect
   , consumer
+  , disconnect
   , subscribe
   ) where
 
@@ -108,6 +109,19 @@ consumer kafka config =
   where
   toConsumerConfigImpl :: ConsumerConfig -> ConsumerConfigImpl
   toConsumerConfigImpl x = x
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1034
+-- |
+-- | `disconnect(): Promise<void>`
+foreign import _disconnect ::
+  Effect.Uncurried.EffectFn1
+    Consumer
+    (Control.Promise.Promise Unit)
+
+disconnect :: Consumer -> Effect.Aff.Aff Unit
+disconnect consumer' =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn1 _disconnect consumer'
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1035
 -- |
