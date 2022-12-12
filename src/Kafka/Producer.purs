@@ -1,6 +1,5 @@
 module Kafka.Producer
   ( Message
-  , MessageHeaders
   , Producer
   , ProducerBatch
   , ProducerConfig
@@ -26,14 +25,14 @@ import Data.Time.Duration as Data.Time.Duration
 import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
-import Foreign.Object as Foreign.Object
 import Kafka.FFI as Kafka.FFI
 import Kafka.Kafka as Kafka.Kafka
+import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
 
 type Message =
-  { headers :: Data.Maybe.Maybe MessageHeaders
+  { headers :: Data.Maybe.Maybe Kafka.Type.MessageHeaders
   , key :: Data.Maybe.Maybe Value
   , partition :: Data.Maybe.Maybe Int
   , timestamp :: Data.Maybe.Maybe Data.DateTime.Instant.Instant
@@ -57,26 +56,11 @@ type MessageImpl =
   Kafka.FFI.Object
     ( value :: Data.Nullable.Nullable ValueImpl
     )
-    ( headers :: MessageHeadersImpl
+    ( headers :: Kafka.Type.MessageHeadersImpl
     , key :: ValueImpl
     , partition :: Int
     , timestamp :: Number
     )
-
-type MessageHeaders =
-  Foreign.Object.Object String
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L148
--- |
--- | ```
--- | export interface IHeaders {
--- |   [key: string]: Buffer | string | (Buffer | string)[] | undefined
--- | }
--- | ```
--- |
--- | NOTE only support `string` for now
-type MessageHeadersImpl =
-  Foreign.Object.Object String
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787
 foreign import data Producer :: Type
