@@ -2,6 +2,7 @@ module Kafka.Admin
   ( Admin
   , admin
   , connect
+  , disconnect
   ) where
 
 import Prelude
@@ -56,3 +57,16 @@ connect :: Admin -> Effect.Aff.Aff Unit
 connect admin' =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn1 _connect admin'
+
+-- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L432
+-- |
+-- | `disconnect(): Promise<void>`
+foreign import _disconnect ::
+  Effect.Uncurried.EffectFn1
+    Admin
+    (Control.Promise.Promise Unit)
+
+disconnect :: Admin -> Effect.Aff.Aff Unit
+disconnect admin' =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn1 _disconnect admin'

@@ -7,3 +7,7 @@ exports._admin = function _admin(kafka, config) {
 exports._connect = function _connect(admin) {
   return admin.connect();
 };
+
+exports._disconnect = function _disconnect(admin) {
+  return admin.connnect();
+};
