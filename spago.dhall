@@ -33,6 +33,7 @@ to generate this file without the comments in this block.
     , "st"
     , "strings"
     , "tailrec"
+    , "test-unit"
     , "transformers"
     , "typelevel-prelude"
     , "unsafe-coerce"
