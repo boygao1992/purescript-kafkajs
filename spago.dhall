@@ -13,6 +13,7 @@ to generate this file without the comments in this block.
 { name = "kafkajs"
 , dependencies =
     [ "aff"
+    , "aff-promise"
     , "console"
     , "effect"
     , "either"
@@ -20,6 +21,7 @@ to generate this file without the comments in this block.
     , "foldable-traversable"
     , "foreign-object"
     , "integers"
+    , "maybe"
     , "node-child-process"
     , "option"
     , "prelude"
@@ -30,6 +32,7 @@ to generate this file without the comments in this block.
     , "transformers"
     , "typelevel-prelude"
     , "unsafe-coerce"
+    , "untagged-union"
     ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
