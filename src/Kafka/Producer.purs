@@ -127,18 +127,14 @@ type ProducerRecord =
 -- |   * the timestamp returned by broker after appending the messages. If CreateTime is used for the topic, the timestamp will be -1. If LogAppendTime is used for the topic, the timestamp will be the broker local time when the messages are appended.
 -- | * `logStartOffset`
 -- |   * the start offset of the log at the time of this append
--- | * `offset`
 -- | * `partition`
--- | * `timestamp`
 -- | * `topicName`
 type RecordMetadata =
   { baseOffset :: Data.Maybe.Maybe String
   , errorCode :: Int
   , logAppendTime :: Data.Maybe.Maybe String
   , logStartOffset :: Data.Maybe.Maybe String
-  , offset :: Data.Maybe.Maybe String
   , partition :: Int
-  , timestamp :: Data.Maybe.Maybe String
   , topicName :: String
   }
 
@@ -155,8 +151,12 @@ type RecordMetadata =
 -- | * `baseOffset?: string`
 -- | * `logAppendTime?: string`
 -- | * `logStartOffset?: string`
+-- |
+-- | Unsupported
 -- | * `offset?: string`
+-- |   * NOTE doesn't exist in Kafka protocol schema. See https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/requests/produce/v7/response.js#L3-L14
 -- | * `timestamp?: string`
+-- |   * NOTE doesn't exist in Kafka protocol schema. See https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/requests/produce/v7/response.js#L3-L14
 type RecordMetadataImpl =
   Kafka.FFI.Object
     ( errorCode :: Int
@@ -166,8 +166,6 @@ type RecordMetadataImpl =
     ( baseOffset :: String
     , logAppendTime :: String
     , logStartOffset :: String
-    , offset :: String
-    , timestamp :: String
     )
 
 type TopicMessages =
