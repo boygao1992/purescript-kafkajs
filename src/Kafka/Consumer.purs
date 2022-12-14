@@ -18,6 +18,7 @@ import Data.String.Regex as Data.String.Regex
 import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
+import Foreign.Object as Foreign.Object
 import Kafka.FFI as Kafka.FFI
 import Kafka.Kafka as Kafka.Kafka
 import Kafka.Type as Kafka.Type
@@ -270,11 +271,9 @@ type EachBatchPayloadImpl =
 -- |   * `Data.DateTime.Instant.Instant` in `String`
 -- | * `value`
 type KafkaMessage =
-  { attributes :: Int
-  , headers :: Data.Maybe.Maybe Kafka.Type.MessageHeaders
+  { headers :: Kafka.Type.MessageHeaders
   , key :: Data.Maybe.Maybe Node.Buffer.Buffer
   , offset :: String
-  , size :: Data.Maybe.Maybe Int
   , timestamp :: String
   , value :: Data.Maybe.Maybe Node.Buffer.Buffer
   }
@@ -301,8 +300,6 @@ type KafkaMessage =
 -- | See [Message sets | A Guide To The Kafka Protocol](https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-Messagesets)
 -- |
 -- | Required
--- | * `attributes: number`
--- |   * `integer`, see https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/message/v1/decoder.js#L2
 -- | * `key: Buffer | null`
 -- | * `offset: string`
 -- | * `timestamp: string`
@@ -310,18 +307,41 @@ type KafkaMessage =
 -- |
 -- | Optional
 -- | * `headers: IHeaders` or `headers?: never`
+-- |
+-- | Unsupported
+-- | * `attributes: number`
+-- |   * `integer`, see https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/message/v1/decoder.js#L2
 -- | * `size: number` or `size?: never`
 -- |   * `integer`, see https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/messageSet/decoder.js#L89
+-- |
+-- | Undocumented
+-- | * `batchContext: object`
+-- |   ```
+-- |   batchContext: {
+-- |     firstOffset: '0',
+-- |     firstTimestamp: '1670985665652',
+-- |     partitionLeaderEpoch: 0,
+-- |     inTransaction: false,
+-- |     isControlBatch: false,
+-- |     lastOffsetDelta: 2,
+-- |     producerId: '-1',
+-- |     producerEpoch: 0,
+-- |     firstSequence: 0,
+-- |     maxTimestamp: '1670985665652',
+-- |     timestampType: 0,
+-- |     magicByte: 2
+-- |   }
+-- |   ```
+-- | * `isControlRecord: boolean`
+-- | * `magicByte: int`
 type KafkaMessageImpl =
   Kafka.FFI.Object
-    ( attributes :: Int
-    , key :: Data.Nullable.Nullable Node.Buffer.Buffer
+    ( key :: Data.Nullable.Nullable Node.Buffer.Buffer
     , offset :: String
     , timestamp :: String
     , value :: Data.Nullable.Nullable Node.Buffer.Buffer
     )
     ( headers :: Kafka.Type.MessageHeadersImpl
-    , size :: Int
     )
 
 type Offsets =
@@ -463,7 +483,8 @@ run consumer' consumerRunConfig =
   fromKafkaMessageImpl :: KafkaMessageImpl -> KafkaMessage
   fromKafkaMessageImpl kafkaMessageImpl =
     record
-      { key = Data.Nullable.toMaybe record.key
+      { headers = Data.Maybe.fromMaybe Foreign.Object.empty record.headers
+      , key = Data.Nullable.toMaybe record.key
       , value = Data.Nullable.toMaybe record.value
       }
     where
