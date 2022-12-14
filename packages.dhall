@@ -102,4 +102,32 @@ let upstream =
       https://github.com/purescript/package-sets/releases/download/psc-0.14.1-20210516/packages.dhall
         sha256:f5e978371d4cdc4b916add9011021509c8d869f4c3f6d0d2694c0e03a85046c8
 
-in  upstream
+let overrides = {=}
+
+let additions =
+      { option =
+          { dependencies =
+              [ "argonaut-codecs"
+              , "argonaut-core"
+              , "codec"
+              , "codec-argonaut"
+              , "either"
+              , "foreign"
+              , "foreign-object"
+              , "lists"
+              , "maybe"
+              , "profunctor"
+              , "prelude"
+              , "record"
+              , "simple-json"
+              , "transformers"
+              , "tuples"
+              , "type-equality"
+              , "unsafe-coerce"
+              ]
+          , repo = "https://github.com/joneshf/purescript-option.git"
+          , version = "v9.0.0"
+          }
+      }
+
+in  upstream // overrides // additions
