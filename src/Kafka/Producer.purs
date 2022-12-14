@@ -31,6 +31,19 @@ import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
 
+-- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
+-- |
+-- | * `headers`
+-- |   * Metadata to associate with your message. See [Headers](https://kafka.js.org/docs/producing#message-headers)
+-- | * `key`
+-- |   * Used for partitioning. See [Key](https://kafka.js.org/docs/producing#message-key)
+-- | * `partition`
+-- |   * Which partition to send the message to. See [Key](https://kafka.js.org/docs/producing#message-key) for details on how the partition is decided if this property is omitted.
+-- | * `timestamp`
+-- |   * The timestamp of when the message was created. See [Timestamp](https://kafka.js.org/docs/producing#message-timestamp) for details.
+-- |   * default: `Date.now()`
+-- | * `value`
+-- |   * Your message content. The value can be a `Buffer`, a `string` or `null`. The value will always be encoded as bytes when sent to Kafka. When consumed, the consumer will need to interpret the value according to your schema.
 type Message =
   { headers :: Data.Maybe.Maybe Kafka.Type.MessageHeaders
   , key :: Data.Maybe.Maybe Value
@@ -65,6 +78,8 @@ type MessageImpl =
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787
 foreign import data Producer :: Type
 
+-- | * `topicMessages`
+-- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
   { topicMessages :: Array TopicMessages
   }
@@ -102,6 +117,20 @@ type ProducerRecord =
   , topic :: String
   }
 
+-- | * `baseOffset`
+-- |   * the offset of the first message in the associated segment file
+-- | * `errorCode`
+-- |   * the error code, or 0 if there was no error.
+-- |   * see [protocal.error.errorCodes](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/error.js#L4) for all the error codes supported by `kafkajs`
+-- |   * see [Error Codes | Kafka Protocol Guide](https://kafka.apache.org/protocol.html#protocol_error_codes) for the complete list which has new additions
+-- | * `logAppendTime`
+-- |   * the timestamp returned by broker after appending the messages. If CreateTime is used for the topic, the timestamp will be -1. If LogAppendTime is used for the topic, the timestamp will be the broker local time when the messages are appended.
+-- | * `logStartOffset`
+-- |   * the start offset of the log at the time of this append
+-- | * `offset`
+-- | * `partition`
+-- | * `timestamp`
+-- | * `topicName`
 type RecordMetadata =
   { baseOffset :: Data.Maybe.Maybe String
   , errorCode :: Int
@@ -119,8 +148,6 @@ type RecordMetadata =
 -- | * `errorCode: number`
 -- |   * NOTE `RecordMetadataImpl` is success response so likely `errorCode` is always `0` otherwise we should expect an exception raised from `Promise`
 -- |     * see [protocol.requests.produce.v3.response](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/requests/produce/v3/response.js#L45)
--- |   * see [protocal.error.errorCodes](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/error.js#L4) for all the error codes supported by `kafkajs`
--- |   * see [Error Codes | Kafka Protocol Guide](https://kafka.apache.org/protocol.html#protocol_error_codes) for the complete list which has new additions
 -- | * `partition: number`
 -- | * `topicName: string`
 -- |

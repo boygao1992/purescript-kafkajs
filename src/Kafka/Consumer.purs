@@ -24,6 +24,27 @@ import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
 
+-- | see comments in https://github.com/tulios/kafkajs/blob/v2.2.3/src/consumer/batch.js
+-- |
+-- | * `firstOffset`
+-- |   * offset of the first message in the batch
+-- |   * `Nothing` if there is no message in the batch (within the requested offset)
+-- | * `highWatermark`
+-- |   * is the last committed offset within the topic partition. It can be useful for calculating lag.
+-- |   * [LEO (end-of-log offset) vs HW (high watermark)](https://stackoverflow.com/a/67806069)
+-- | * `isEmpty`
+-- |   * if there is no message in the batch
+-- | * `lastOffset`
+-- |   * offset of the last message in the batch
+-- | * `messages`
+-- | * `offsetLag`
+-- |   * returns the lag based on the last offset in the batch (also known as "high")
+-- | * `offsetLagLow`
+-- |   * returns the lag based on the first offset in the batch
+-- | * `partition`
+-- |   * partition ID
+-- | * `topic`
+-- |   * topic name
 type Batch =
   { firstOffset :: Effect.Effect (Data.Maybe.Maybe String)
   , highWatermark :: String
@@ -38,17 +59,14 @@ type Batch =
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L876
 -- |
--- | see comments in https://github.com/tulios/kafkajs/blob/v2.2.3/src/consumer/batch.js
--- |
 -- | * `firstOffset(): string | null`
 -- |   * `null` when `broker.fetch` returns stale messages from a partition, see https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/consumer/batch.js#L20-L25
 -- | * `highWatermark: string`
--- |   * LEO (end-of-log offset) vs HW (high watermark), see https://stackoverflow.com/a/67806069
 -- | * `isEmpty(): boolean`
 -- | * `lastOffset(): string`
+-- |   * when `messages` is empty, see https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/consumer/batch.js#L77
 -- | * `messages: KafkaMessage[]`
 -- | * `offsetLag(): string`
--- |   * returns the lag based on the last offset in the batch (also known as "high")
 -- | * `offsetLagLow(): string`
 -- |   * returns the lag based on the first offset in the batch
 -- | * `partition: number`
@@ -69,6 +87,9 @@ type BatchImpl =
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1032
 foreign import data Consumer :: Type
 
+-- | * `groupId`
+-- |   * consumer group ID
+-- |   * Consumer groups allow a group of machines or processes to coordinate access to a list of topics, distributing the load among the consumers. When a consumer fails the load is automatically distributed to other members of the group. Consumer groups __must have__ unique group ids within the cluster, from a kafka broker perspective.
 type ConsumerConfig =
   { groupId :: String }
 
@@ -95,6 +116,18 @@ type ConsumerConfig =
 type ConsumerConfigImpl =
   { groupId :: String }
 
+-- | * `autoCommit`
+-- |   * auto commit offsets periodically during a batch
+-- |   * see [autoCommit](https://kafka.js.org/docs/consuming#a-name-auto-commit-a-autocommit)
+-- | * `eachBatch`
+-- |   * see [eachBatch](https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch)
+-- | * `eachBatchAutoResolve`
+-- |   * auto commit offsets after successful `eachBatch`
+-- |   * default: `true`
+-- | * `partitionsConsumedConcurrently`
+-- |   * concurrently instead of sequentially invoke `eachMessage` if count is greater than `1`
+-- |   * default: `1`
+-- |   * see [Partition-aware concurrency](https://kafka.js.org/docs/consuming#a-name-concurrent-processing-a-partition-aware-concurrency)
 type ConsumerRunConfig =
   { autoCommit ::
       Data.Maybe.Maybe
@@ -110,16 +143,12 @@ type ConsumerRunConfig =
 -- |
 -- | Optional
 -- | * `autoCommit?: boolean`
--- |   * see https://kafka.js.org/docs/consuming#a-name-auto-commit-a-autocommit
 -- | * `autoCommitInterval?: number | null`
 -- |   * in milliseconds
 -- | * `autoCommitThreshold?: number | null`
 -- |   * in milliseconds
 -- | * `eachBatch?: EachBatchHandler`
--- |   * see https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch
 -- | * `eachBatchAutoResolve?: boolean`
--- |   * auto commit after successful `eachBatch`
--- |   * default to `true`
 -- | * `partitionsConsumedConcurrently?: number`
 -- |
 -- | Unsupported
@@ -135,6 +164,14 @@ type ConsumerRunConfigImpl =
     , partitionsConsumedConcurrently :: Int
     )
 
+-- | * `fromBeginning`
+-- |   * if `true` use the earliest offset, otherwise use the latest offset.
+-- |   * default: `false`
+-- |   * see [fromBeginning](https://kafka.js.org/docs/consuming#a-name-from-beginning-a-frombeginning)
+-- | * `topics`
+-- |   * a list of topic names or regex for fuzzy match
+-- |   * if a regex is included, `kafkajs` will fetch all topics currently (the moment `subscribe` is invoked but not in the future) exists from cluster metadata. See https://github.com/tulios/kafkajs/blob/196105c224353113ae3e7f8ef54ac9bad9951143/src/consumer/index.js#L158
+-- |   * see [Consuming Messages](https://kafka.js.org/docs/consuming)
 type ConsumerSubscribeTopics =
   { fromBeginning :: Data.Maybe.Maybe Boolean
   , topics :: Array Topic
@@ -173,6 +210,23 @@ type EachBatchHandlerImpl =
     EachBatchPayloadImpl
     (Control.Promise.Promise Unit)
 
+-- | see [Each Batch](https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch)
+-- |
+-- | * `commitOffsetsIfNecessary`
+-- |   * is used to commit offsets based on the [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) configurations (`autoCommitInterval` and `autoCommitThreshold`). Note that auto commit won't happen in `eachBatch` if `commitOffsetsIfNecessary` is not invoked. Take a look at [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) for more information.
+-- |   * Commit offsets if provided. Otherwise commit most recent resolved offsets if the `autoCommit` conditions are met. See https://github.com/tulios/kafkajs/blob/196105c224353113ae3e7f8ef54ac9bad9951143/src/consumer/runner.js#L302-L312
+-- | * `heartbeat`
+-- |   * can be used to send heartbeat to the broker according to the set `heartbeatInterval` value in consumer [configuration](https://kafka.js.org/docs/consuming#options).
+-- | * `isRunning`
+-- |   * returns `true` if consumer is in running state, else it returns `false`.
+-- | * `isStale`
+-- |   * returns whether the messages in the batch have been rendered stale through some other operation and should be discarded. For example, when calling [`consumer.seek`](https://kafka.js.org/docs/consuming#seek) the messages in the batch should be discarded, as they are not at the offset we seeked to.
+-- | * `pause`
+-- |   * can be used to pause the consumer for the current topic-partition. All offsets resolved up to that point will be committed (subject to `eachBatchAutoResolve` and [autoCommit](https://kafka.js.org/docs/consuming#auto-commit)). Throw an error to pause in the middle of the batch without resolving the current offset. Alternatively, disable eachBatchAutoResolve. The returned function can be used to resume processing of the topic-partition. See [Pause & Resume](https://kafka.js.org/docs/consuming#pause-resume) for more information about this feature.
+-- | * `resolveOffset`
+-- |   * is used to mark a message in the batch as processed. In case of errors, the consumer will automatically commit the resolved offsets.
+-- | * `uncommittedOffsets`
+-- |   * returns all offsets by topic-partition which have not yet been committed.
 type EachBatchPayload =
   { batch :: Batch
   , commitOffsetsIfNecessary :: Data.Maybe.Maybe Offsets -> Effect.Aff.Aff Unit
@@ -208,6 +262,13 @@ type EachBatchPayloadImpl =
   , uncommittedOffsets :: Effect.Effect OffsetsImpl
   }
 
+-- | * `headers`
+-- | * `key`
+-- | * `offset`
+-- |   * `Int64` in `String`
+-- | * `timestamp`
+-- |   * `Data.DateTime.Instant.Instant` in `String`
+-- | * `value`
 type KafkaMessage =
   { attributes :: Int
   , headers :: Data.Maybe.Maybe Kafka.Type.MessageHeaders
@@ -234,6 +295,10 @@ type KafkaMessage =
 -- | `kafkajs` decoder decides to decode `messages` as `MessageSetEntry`
 -- | or `RecordBatchEntry` based off a `magicByte` in the `messages` Buffer.
 -- | See https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/requests/fetch/v4/decodeMessages.js#L22
+-- |
+-- | `MessageSet` was renamed to `RecordBatch` since `Kafka 0.11` with
+-- | significantly structural changes.
+-- | See [Message sets | A Guide To The Kafka Protocol](https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-Messagesets)
 -- |
 -- | Required
 -- | * `attributes: number`

@@ -27,10 +27,15 @@ type BrokerFunctionImpl =
 foreign import data Kafka :: Type
 
 -- | * `brokers`
+-- |   * A list of seed broker URLs to fetch metadata of the whole broker cluster
+-- |   * see [Broker discovery](https://kafka.js.org/docs/configuration#broker-discovery) if you want to dynamically fetch the list through an `Effect`/`Aff`
 -- | * `clientId`
 -- |   * A logical identifier of an application to be included in
 -- |     server-side request logging.
 -- |   * see [Client Id](https://kafka.js.org/docs/configuration#client-id)
+-- | * `logLevel`
+-- |   * The log level of `kafkajs` built-in `STDOUT` logger
+-- |   * see [Logging](https://kafka.js.org/docs/configuration#logging)
 type KafkaConfig =
   { brokers :: KafkaConfigBrokers
   , clientId :: Data.Maybe.Maybe String
