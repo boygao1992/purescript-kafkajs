@@ -125,10 +125,6 @@ type ConsumerConfigImpl =
 -- | * `eachBatchAutoResolve`
 -- |   * auto commit offsets after successful `eachBatch`
 -- |   * default: `true`
--- | * `partitionsConsumedConcurrently`
--- |   * concurrently instead of sequentially invoke `eachMessage` if count is greater than `1`
--- |   * default: `1`
--- |   * see [Partition-aware concurrency](https://kafka.js.org/docs/consuming#a-name-concurrent-processing-a-partition-aware-concurrency)
 type ConsumerRunConfig =
   { autoCommit ::
       Data.Maybe.Maybe
@@ -137,7 +133,6 @@ type ConsumerRunConfig =
         }
   , eachBatch :: EachBatchHandler
   , eachBatchAutoResolve :: Data.Maybe.Maybe Boolean
-  , partitionsConsumedConcurrently :: Data.Maybe.Maybe Int
   }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1016
@@ -150,10 +145,13 @@ type ConsumerRunConfig =
 -- |   * in milliseconds
 -- | * `eachBatch?: EachBatchHandler`
 -- | * `eachBatchAutoResolve?: boolean`
--- | * `partitionsConsumedConcurrently?: number`
 -- |
 -- | Unsupported
 -- | * `eachMessage?: EachMessageHandler`
+-- | * `partitionsConsumedConcurrently?: number`
+-- |   * concurrently instead of sequentially invoke `eachMessage` if count is greater than `1`
+-- |   * default: `1`
+-- |   * see [Partition-aware concurrency](https://kafka.js.org/docs/consuming#a-name-concurrent-processing-a-partition-aware-concurrency)
 type ConsumerRunConfigImpl =
   Kafka.FFI.Object
     ()
@@ -162,7 +160,6 @@ type ConsumerRunConfigImpl =
     , autoCommitThreshold :: Number
     , eachBatch :: EachBatchHandlerImpl
     , eachBatchAutoResolve :: Boolean
-    , partitionsConsumedConcurrently :: Int
     )
 
 -- | * `fromBeginning`
@@ -497,7 +494,6 @@ run consumer' consumerRunConfig =
     , autoCommitThreshold: x.autoCommit >>= _.autoCommitThreshold
     , eachBatch: toEachBatchHandlerImpl x.eachBatch
     , eachBatchAutoResolve: x.eachBatchAutoResolve
-    , partitionsConsumedConcurrently: x.partitionsConsumedConcurrently
     }
 
   toEachBatchHandlerImpl :: EachBatchHandler -> EachBatchHandlerImpl

@@ -241,7 +241,6 @@ testSuite = do
             Effect.Class.liftEffect $
               Effect.Ref.modify_ (_ <> newMessages) receivedRef
         , eachBatchAutoResolve: Data.Maybe.Just true
-        , partitionsConsumedConcurrently: Data.Maybe.Nothing
         }
       Effect.Aff.delay (Effect.Aff.Milliseconds 1000.0)
     received <- Effect.Class.liftEffect $
