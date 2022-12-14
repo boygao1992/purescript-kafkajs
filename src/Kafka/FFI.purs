@@ -20,6 +20,9 @@ import Unsafe.Coerce as Unsafe.Coerce
 -- | representation as `Option.Option _` which can be used directly
 -- | in FFI definitions to represent JS Object with fields that may
 -- | or may not exist.
+-- |
+-- | We canot use `Option.Record _ _` directly in FFI definitions
+-- | because its underlying representation is not a plain JS object.
 newtype Object (required :: Row Type) (optional :: Row Type) =
   Object
     (Foreign.Object.Object (forall a. a))
