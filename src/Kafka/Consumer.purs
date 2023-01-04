@@ -210,9 +210,10 @@ type EachBatchHandlerImpl =
 
 -- | see [Each Batch](https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch)
 -- |
+-- | * `commitOffsets`
+-- |   * commits offsets if provided, otherwise commits most recently resolved offsets ignoring [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) configurations (`autoCommitInterval` and `autoCommitThreshold`)
 -- | * `commitOffsetsIfNecessary`
--- |   * is used to commit offsets based on the [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) configurations (`autoCommitInterval` and `autoCommitThreshold`). Note that auto commit won't happen in `eachBatch` if `commitOffsetsIfNecessary` is not invoked. Take a look at [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) for more information.
--- |   * Commit offsets if provided. Otherwise commit most recent resolved offsets if the `autoCommit` conditions are met. See https://github.com/tulios/kafkajs/blob/196105c224353113ae3e7f8ef54ac9bad9951143/src/consumer/runner.js#L302-L312
+-- |   * is used to commit most recently resolved offsets based on the [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) configurations (`autoCommitInterval` and `autoCommitThreshold`). Note that auto commit won't happen in `eachBatch` if `commitOffsetsIfNecessary` is not invoked. Take a look at [autoCommit](https://kafka.js.org/docs/consuming#auto-commit) for more information.
 -- | * `heartbeat`
 -- |   * can be used to send heartbeat to the broker according to the set `heartbeatInterval` value in consumer [configuration](https://kafka.js.org/docs/consuming#options).
 -- | * `isRunning`
@@ -223,11 +224,14 @@ type EachBatchHandlerImpl =
 -- |   * can be used to pause the consumer for the current topic-partition. All offsets resolved up to that point will be committed (subject to `eachBatchAutoResolve` and [autoCommit](https://kafka.js.org/docs/consuming#auto-commit)). Throw an error to pause in the middle of the batch without resolving the current offset. Alternatively, disable eachBatchAutoResolve. The returned function can be used to resume processing of the topic-partition. See [Pause & Resume](https://kafka.js.org/docs/consuming#pause-resume) for more information about this feature.
 -- | * `resolveOffset`
 -- |   * is used to mark a message in the batch as processed. In case of errors, the consumer will automatically commit the resolved offsets.
+-- |   * use `offset` on `KafkaMessage`
+-- |   * there's no need to explicitly specify `topic` and `partition` because each batch of messages comes from the same partition and they are implicitly tracked by `consumerGroup`
 -- | * `uncommittedOffsets`
 -- |   * returns all offsets by topic-partition which have not yet been committed.
 type EachBatchPayload =
   { batch :: Batch
-  , commitOffsetsIfNecessary :: Data.Maybe.Maybe Offsets -> Effect.Aff.Aff Unit
+  , commitOffsets :: Data.Maybe.Maybe Offsets -> Effect.Aff.Aff Unit
+  , commitOffsetsIfNecessary :: Effect.Aff.Aff Unit
   , heartbeat :: Effect.Aff.Aff Unit
   , isRunning :: Effect.Effect Boolean
   , isStale :: Effect.Effect Boolean
@@ -240,6 +244,13 @@ type EachBatchPayload =
 -- |
 -- | * `batch: Batch`
 -- | * `commitOffsetsIfNecessary(offsets?: Offsets): Promise<void>`
+-- |   * `null` - `commitOffsetsIfNecessary()`
+-- |     * see https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/consumer/runner.js#L308
+-- |   * `{}` - `commitOffsets({})`
+-- |     * commit all `uncommittedOffsets()`
+-- |     * see https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/consumer/offsetManager/index.js#L248
+-- |   * `{ topics: _ }` - `commitOffsets({ topics: _ })`
+-- |     * commit the specified topic-partition offsets
 -- | * `heartbeat(): Promise<void>`
 -- | * `isRunning(): boolean`
 -- | * `isStale(): boolean`
@@ -257,7 +268,7 @@ type EachBatchPayloadImpl =
   , isStale :: Effect.Effect Boolean
   , pause :: Effect.Effect (Effect.Effect Unit)
   , resolveOffset :: Effect.Uncurried.EffectFn1 String Unit
-  , uncommittedOffsets :: Effect.Effect OffsetsImpl
+  , uncommittedOffsets :: Effect.Effect OffsetsByTopicParitionImpl
   }
 
 -- | * `headers`
@@ -346,12 +357,25 @@ type Offsets =
   }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L660
--- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L843
--- |
--- | NOTE `Offsets` and `OffsetsByTopicPartition` are exactly the same
 -- |
 -- | `topics: TopicOffsets[]`
+-- |
+-- | NOTE `topics` is optional implementation-wise but marked as required in TS definition
+-- | see comments above `EachBatchPayloadImpl` on `commitOffsetsIfNecessary`
 type OffsetsImpl =
+  Kafka.FFI.Object
+    ()
+    ( topics :: Array TopicOffsetsImpl
+    )
+
+type OffsetsByTopicParition =
+  { topics :: Array TopicOffsets
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L843
+-- |
+-- | `topics: TopicOffsets[]`
+type OffsetsByTopicParitionImpl =
   { topics :: Array TopicOffsetsImpl
   }
 
@@ -464,10 +488,17 @@ run consumer' consumerRunConfig =
   fromEachBatchPayloadImpl :: EachBatchPayloadImpl -> EachBatchPayload
   fromEachBatchPayloadImpl x =
     { batch: fromBatchImpl x.batch
-    , commitOffsetsIfNecessary: \maybeOffsets ->
+    , commitOffsetsIfNecessary:
         Control.Promise.toAffE
           $ Effect.Uncurried.runEffectFn1 x.commitOffsetsIfNecessary
-          $ Data.Nullable.toNullable maybeOffsets
+          $ Data.Nullable.null
+    , commitOffsets: \maybeOffsets ->
+        Control.Promise.toAffE
+          $ Effect.Uncurried.runEffectFn1 x.commitOffsetsIfNecessary
+          $ Data.Nullable.notNull
+          $ case maybeOffsets of
+              Data.Maybe.Nothing -> Kafka.FFI.objectFromRecord {}
+              Data.Maybe.Just offsets -> Kafka.FFI.objectFromRecord offsets
     , heartbeat: Control.Promise.toAffE x.heartbeat
     , isRunning: x.isRunning
     , isStale: x.isStale
