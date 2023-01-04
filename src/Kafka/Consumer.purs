@@ -1,7 +1,17 @@
 module Kafka.Consumer
-  ( Consumer
+  ( Batch
+  , Consume(..)
+  , Consumer
   , ConsumerConfig
+  , EachBatchHandler
+  , EachBatchPayload
+  , EachMessageHandler
+  , EachMessagePayload
+  , KafkaMessage
+  , Offsets
+  , PartitionOffset
   , Topic(..)
+  , TopicOffsets
   , connect
   , consumer
   , disconnect
@@ -85,6 +95,17 @@ type BatchImpl =
   , topic :: String
   }
 
+-- | * `EachBatch`
+-- |   * see [Each Batch](https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch)
+-- | * `EachMessage`
+-- |   * see [Each Message](https://kafka.js.org/docs/consuming#a-name-each-message-a-eachmessage)
+data Consume
+  = EachBatch
+      { autoResolve :: Data.Maybe.Maybe Boolean
+      , handler :: EachBatchHandler
+      }
+  | EachMessage EachMessageHandler
+
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1032
 foreign import data Consumer :: Type
 
@@ -121,10 +142,10 @@ type ConsumerConfigImpl =
 -- |   * auto commit offsets periodically during a batch
 -- |   * see [autoCommit](https://kafka.js.org/docs/consuming#a-name-auto-commit-a-autocommit)
 -- | * `eachBatch`
+-- |   * `autoResolve`
+-- |     * auto commit offsets after successful `eachBatch`
+-- |     * default: `true`
 -- |   * see [eachBatch](https://kafka.js.org/docs/consuming#a-name-each-batch-a-eachbatch)
--- | * `eachBatchAutoResolve`
--- |   * auto commit offsets after successful `eachBatch`
--- |   * default: `true`
 -- | * `partitionsConsumedConcurrently`
 -- |   * concurrently instead of sequentially invoke `eachBatch`/`eachMessage` for multiple partitions if count is greater than `1`. Messages in the same partition are still guaranteed to be processed in order, but messages from multiple partitions can be processed at the same time.
 -- |   * should not be larger than the number of partitions consumed
@@ -136,8 +157,7 @@ type ConsumerRunConfig =
         { autoCommitInterval :: Data.Maybe.Maybe Number
         , autoCommitThreshold :: Data.Maybe.Maybe Number
         }
-  , eachBatch :: EachBatchHandler
-  , eachBatchAutoResolve :: Data.Maybe.Maybe Boolean
+  , consume :: Consume
   , partitionsConsumedConcurrently :: Data.Maybe.Maybe Int
   }
 
@@ -151,10 +171,8 @@ type ConsumerRunConfig =
 -- |   * in milliseconds
 -- | * `eachBatch?: EachBatchHandler`
 -- | * `eachBatchAutoResolve?: boolean`
--- | * `partitionsConsumedConcurrently?: number`
--- |
--- | Unsupported
 -- | * `eachMessage?: EachMessageHandler`
+-- | * `partitionsConsumedConcurrently?: number`
 type ConsumerRunConfigImpl =
   Kafka.FFI.Object
     ()
@@ -163,6 +181,7 @@ type ConsumerRunConfigImpl =
     , autoCommitThreshold :: Number
     , eachBatch :: EachBatchHandlerImpl
     , eachBatchAutoResolve :: Boolean
+    , eachMessage :: EachMessageHandlerImpl
     , partitionsConsumedConcurrently :: Int
     )
 
@@ -273,6 +292,49 @@ type EachBatchPayloadImpl =
   , pause :: Effect.Effect (Effect.Effect Unit)
   , resolveOffset :: Effect.Uncurried.EffectFn1 String Unit
   , uncommittedOffsets :: Effect.Effect OffsetsByTopicParitionImpl
+  }
+
+type EachMessageHandler =
+  EachMessagePayload -> Effect.Aff.Aff Unit
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1014
+-- |
+-- | `(payload: EachMessagePayload) => Promise<void>`
+type EachMessageHandlerImpl =
+  Effect.Uncurried.EffectFn1
+    EachMessagePayloadImpl
+    (Control.Promise.Promise Unit)
+
+-- | see [Each Message](https://kafka.js.org/docs/consuming#a-name-each-message-a-eachmessage)
+-- |
+-- | * `heartbeat`
+-- |   * can be used to send heartbeat to the broker according to the set `heartbeatInterval` value in consumer [configuration](https://kafka.js.org/docs/consuming#options).
+-- | * `message`
+-- | * `pause`
+-- |   * can be used to pause the consumer for the current topic-partition. All offsets resolved up to that point will be committed (subject to `eachBatchAutoResolve` and [autoCommit](https://kafka.js.org/docs/consuming#auto-commit)). Throw an error to pause in the middle of the batch without resolving the current offset. Alternatively, disable eachBatchAutoResolve. The returned function can be used to resume processing of the topic-partition. See [Pause & Resume](https://kafka.js.org/docs/consuming#pause-resume) for more information about this feature.
+-- | * `partition`
+-- | * `topic`
+type EachMessagePayload =
+  { heartbeat :: Effect.Aff.Aff Unit
+  , message :: KafkaMessage
+  , pause :: Effect.Effect { resume :: Effect.Effect Unit }
+  , partition :: Int
+  , topic :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L982
+-- |
+-- | * `heartbeat(): Promise<void>`
+-- | * `message: KafkaMessage`
+-- | * `partition: number`
+-- | * `pause(): () => void`
+-- | * `topic: string`
+type EachMessagePayloadImpl =
+  { heartbeat :: Effect.Effect (Control.Promise.Promise Unit)
+  , message :: KafkaMessageImpl
+  , partition :: Int
+  , pause :: Effect.Effect (Effect.Effect Unit)
+  , topic :: String
   }
 
 -- | * `headers`
@@ -512,6 +574,15 @@ run consumer' consumerRunConfig =
     , uncommittedOffsets: x.uncommittedOffsets
     }
 
+  fromEachMessagePayloadImpl :: EachMessagePayloadImpl -> EachMessagePayload
+  fromEachMessagePayloadImpl x =
+    { heartbeat: Control.Promise.toAffE x.heartbeat
+    , message: fromKafkaMessageImpl x.message
+    , partition: x.partition
+    , pause: { resume: _ } <$> x.pause
+    , topic: x.topic
+    }
+
   fromKafkaMessageImpl :: KafkaMessageImpl -> KafkaMessage
   fromKafkaMessageImpl kafkaMessageImpl =
     record
@@ -527,8 +598,17 @@ run consumer' consumerRunConfig =
     { autoCommit: Data.Maybe.isJust x.autoCommit
     , autoCommitInterval: x.autoCommit >>= _.autoCommitInterval
     , autoCommitThreshold: x.autoCommit >>= _.autoCommitThreshold
-    , eachBatch: toEachBatchHandlerImpl x.eachBatch
-    , eachBatchAutoResolve: x.eachBatchAutoResolve
+    , eachBatch: case x.consume of
+        EachBatch eachBatch -> Data.Maybe.Just $
+          toEachBatchHandlerImpl eachBatch.handler
+        EachMessage _ -> Data.Maybe.Nothing
+    , eachBatchAutoResolve: case x.consume of
+        EachBatch eachBatch -> eachBatch.autoResolve
+        EachMessage _ -> Data.Maybe.Nothing
+    , eachMessage: case x.consume of
+        EachBatch _ -> Data.Maybe.Nothing
+        EachMessage eachMessageHandler -> Data.Maybe.Just $
+          toEachMessageHandlerImpl eachMessageHandler
     , partitionsConsumedConcurrently: x.partitionsConsumedConcurrently
     }
 
@@ -538,6 +618,13 @@ run consumer' consumerRunConfig =
       Control.Promise.fromAff
         $ eachBatchHandler
         $ fromEachBatchPayloadImpl eachBatchPayloadImpl
+
+  toEachMessageHandlerImpl :: EachMessageHandler -> EachMessageHandlerImpl
+  toEachMessageHandlerImpl eachMessageHandler =
+    Effect.Uncurried.mkEffectFn1 \eachMessagePayloadImpl ->
+      Control.Promise.fromAff
+        $ eachMessageHandler
+        $ fromEachMessagePayloadImpl eachMessagePayloadImpl
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1035
 -- |
