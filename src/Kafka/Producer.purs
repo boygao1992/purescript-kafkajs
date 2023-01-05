@@ -1,5 +1,6 @@
 module Kafka.Producer
-  ( Message
+  ( Acks(..)
+  , Message
   , Producer
   , ProducerBatch
   , ProducerConfig
@@ -30,6 +31,23 @@ import Kafka.Kafka as Kafka.Kafka
 import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
+
+-- | Control the number of required acks.
+-- | * `AcksAll`
+-- |   * all insync replicas must acknowledge
+-- | * `AcksNo`
+-- |   * no acknowledgments
+-- | * `AcksLeader`
+-- |   * only waits for the leader to acknowledge
+data Acks
+  = AcksAll
+  | AcksNo
+  | AcksLeader
+
+derive instance eqAcks :: Eq Acks
+derive instance ordAcks :: Ord Acks
+
+type AcksImpl = Int
 
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
 -- |
@@ -78,20 +96,30 @@ type MessageImpl =
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787
 foreign import data Producer :: Type
 
+-- | * `acks`
+-- |   * Control the number of required acks.
+-- |   * default: `AcksAll`
 -- | * `topicMessages`
 -- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
-  { topicMessages :: Array TopicMessages
+  { acks :: Data.Maybe.Maybe Acks
+  , topicMessages :: Array TopicMessages
   }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L753
 -- |
 -- | Optional
+-- | * `acks?: number`
 -- | * `topicMessages?: TopicMessages[]`
+-- |
+-- | Unsupported
+-- | * `compression?: CompressionTypes`
+-- | * `timeout?: number`
 type ProducerBatchImpl =
   Kafka.FFI.Object
     ()
-    ( topicMessages :: Array TopicMessagesImpl
+    ( acks :: AcksImpl
+    , topicMessages :: Array TopicMessagesImpl
     )
 
 type ProducerConfig =
@@ -112,8 +140,17 @@ type ProducerConfigImpl =
   {}
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L729
+-- |
+-- | * `acks`
+-- |   * Control the number of required acks.
+-- |   * default: `AcksAll`
+-- | * `messages`
+-- |   * a list of messages to be sent
+-- | * `topic`
+-- |   * topic name
 type ProducerRecord =
-  { messages :: Array Message
+  { acks :: Data.Maybe.Maybe Acks
+  , messages :: Array Message
   , topic :: String
   }
 
@@ -238,7 +275,8 @@ producer kafka config =
 -- | NOTE logic is very simple so instead of FFI we rewrite in PS
 send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
 send producer' x = sendBatch producer'
-  { topicMessages: Data.Array.singleton topicMessages
+  { acks: x.acks
+  , topicMessages: Data.Array.singleton topicMessages
   }
   where
   topicMessages :: TopicMessages
@@ -266,6 +304,17 @@ sendBatch producer' producerBatch = do
   fromRecordMetadataImpl :: RecordMetadataImpl -> RecordMetadata
   fromRecordMetadataImpl = Kafka.FFI.objectToRecord
 
+  -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/producer/messageProducer.js#L43-L46
+  -- |
+  -- | -1 = all replicas must acknowledge
+  -- |  0 = no acknowledgments
+  -- |  1 = only waits for the leader to acknowledge
+  toAcksImpl :: Acks -> AcksImpl
+  toAcksImpl = case _ of
+    AcksAll -> -1
+    AcksNo -> 0
+    AcksLeader -> 1
+
   toMessageImpl :: Message -> MessageImpl
   toMessageImpl x = Kafka.FFI.objectFromRecord
     { headers: x.headers
@@ -279,7 +328,8 @@ sendBatch producer' producerBatch = do
 
   toProducerBatchImpl :: ProducerBatch -> ProducerBatchImpl
   toProducerBatchImpl x = Kafka.FFI.objectFromRecord
-    { topicMessages: toTopicMessagesImpl <$> x.topicMessages
+    { acks: toAcksImpl <$> x.acks
+    , topicMessages: toTopicMessagesImpl <$> x.topicMessages
     }
 
   toTopicMessagesImpl :: TopicMessages -> TopicMessagesImpl

@@ -201,7 +201,8 @@ testSuite = do
       Kafka.Producer.producer kafka {}
     Effect.Aff.bracket (Kafka.Producer.connect producer) (\_ -> Kafka.Producer.disconnect producer) \_ -> do
       void $ Kafka.Producer.send producer
-        { messages: messages <#> \message ->
+        { acks: Data.Maybe.Nothing
+        , messages: messages <#> \message ->
             { headers: Data.Maybe.Nothing
             , key: Data.Maybe.Just $ Kafka.Producer.String message.key
             , partition: Data.Maybe.Nothing
