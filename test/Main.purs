@@ -222,25 +222,28 @@ testSuite = do
         }
       Kafka.Consumer.run consumer
         { autoCommit: Data.Maybe.Nothing
-        , eachBatch: \eachBatchPayload -> do
-            (newMessages :: Array { key :: String, value :: String }) <-
-              map Data.Array.catMaybes
-                $ Data.Traversable.for eachBatchPayload.batch.messages \message -> do
-                    let
-                      maybeKeyValue :: Data.Maybe.Maybe { key :: Node.Buffer.Buffer, value :: Node.Buffer.Buffer }
-                      maybeKeyValue = do
-                        key <- message.key
-                        value <- message.value
-                        pure { key, value }
-                    Data.Traversable.for maybeKeyValue \keyValue -> do
-                      key <- Effect.Class.liftEffect $
-                        Node.Buffer.toString Node.Encoding.UTF8 keyValue.key
-                      value <- Effect.Class.liftEffect $
-                        Node.Buffer.toString Node.Encoding.UTF8 keyValue.value
-                      pure { key, value }
-            Effect.Class.liftEffect $
-              Effect.Ref.modify_ (_ <> newMessages) receivedRef
-        , eachBatchAutoResolve: Data.Maybe.Just true
+        , consume: Kafka.Consumer.EachBatch
+            { autoResolve: Data.Maybe.Just true
+            , handler: \eachBatchPayload -> do
+                (newMessages :: Array { key :: String, value :: String }) <-
+                  map Data.Array.catMaybes
+                    $ Data.Traversable.for eachBatchPayload.batch.messages \message -> do
+                        let
+                          maybeKeyValue :: Data.Maybe.Maybe { key :: Node.Buffer.Buffer, value :: Node.Buffer.Buffer }
+                          maybeKeyValue = do
+                            key <- message.key
+                            value <- message.value
+                            pure { key, value }
+                        Data.Traversable.for maybeKeyValue \keyValue -> do
+                          key <- Effect.Class.liftEffect $
+                            Node.Buffer.toString Node.Encoding.UTF8 keyValue.key
+                          value <- Effect.Class.liftEffect $
+                            Node.Buffer.toString Node.Encoding.UTF8 keyValue.value
+                          pure { key, value }
+                Effect.Class.liftEffect $
+                  Effect.Ref.modify_ (_ <> newMessages) receivedRef
+            }
+        , partitionsConsumedConcurrently: Data.Maybe.Nothing
         }
       Effect.Aff.delay (Effect.Aff.Milliseconds 1000.0)
     received <- Effect.Class.liftEffect $
