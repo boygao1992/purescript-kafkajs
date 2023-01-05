@@ -210,6 +210,7 @@ testSuite = do
             , timestamp: Data.Maybe.Nothing
             , value: Data.Maybe.Just $ Kafka.Producer.String message.value
             }
+        , timeout: Data.Maybe.Nothing
         , topic
         }
     receivedRef <- Effect.Class.liftEffect $

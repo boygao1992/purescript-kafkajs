@@ -120,11 +120,15 @@ foreign import data Producer :: Type
 -- | * `compression`
 -- |   * compression codec
 -- |   * default: `CompressionTypeNone`
+-- | * `timeout`
+-- |   * The time to await a response in ms
+-- |   * default: `30000`
 -- | * `topicMessages`
 -- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
   { acks :: Data.Maybe.Maybe Acks
   , compression :: Data.Maybe.Maybe CompressionType
+  , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , topicMessages :: Array TopicMessages
   }
 
@@ -133,15 +137,14 @@ type ProducerBatch =
 -- | Optional
 -- | * `acks?: number`
 -- | * `compression?: CompressionTypes`
--- | * `topicMessages?: TopicMessages[]`
--- |
--- | Unsupported
 -- | * `timeout?: number`
+-- | * `topicMessages?: TopicMessages[]`
 type ProducerBatchImpl =
   Kafka.FFI.Object
     ()
     ( acks :: AcksImpl
     , compression :: CompressionTypeImpl
+    , timeout :: Number
     , topicMessages :: Array TopicMessagesImpl
     )
 
@@ -172,12 +175,16 @@ type ProducerConfigImpl =
 -- |   * default: `CompressionTypeNone`
 -- | * `messages`
 -- |   * a list of messages to be sent
+-- | * `timeout`
+-- |   * The time to await a response in ms
+-- |   * default: `30000`
 -- | * `topic`
 -- |   * topic name
 type ProducerRecord =
   { acks :: Data.Maybe.Maybe Acks
   , compression :: Data.Maybe.Maybe CompressionType
   , messages :: Array Message
+  , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , topic :: String
   }
 
@@ -304,6 +311,7 @@ send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
 send producer' x = sendBatch producer'
   { acks: x.acks
   , compression: x.compression
+  , timeout: x.timeout
   , topicMessages: Data.Array.singleton topicMessages
   }
   where
@@ -367,6 +375,8 @@ sendBatch producer' producerBatch = do
   toProducerBatchImpl x = Kafka.FFI.objectFromRecord
     { acks: toAcksImpl <$> x.acks
     , compression: toCompressionTypeImpl <$> x.compression
+    , timeout: x.timeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
     , topicMessages: toTopicMessagesImpl <$> x.topicMessages
     }
 
