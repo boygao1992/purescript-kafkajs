@@ -1,5 +1,6 @@
 module Kafka.Producer
   ( Acks(..)
+  , CompressionType(..)
   , Message
   , Producer
   , ProducerBatch
@@ -48,6 +49,23 @@ derive instance eqAcks :: Eq Acks
 derive instance ordAcks :: Ord Acks
 
 type AcksImpl = Int
+
+data CompressionType
+  = CompressionTypeNone
+  | CompressionTypeGzip
+
+derive instance eqCompressionType :: Eq CompressionType
+derive instance ordCompressionType :: Ord CompressionType
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1116
+-- | `CompressionTypes`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
+-- | `Compression.Types`
+-- |
+-- | NOTE only `GZIP` is implemented
+-- | see [`Compression.Codecs`](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L13-L24)
+type CompressionTypeImpl = Int
 
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
 -- |
@@ -99,10 +117,14 @@ foreign import data Producer :: Type
 -- | * `acks`
 -- |   * Control the number of required acks.
 -- |   * default: `AcksAll`
+-- | * `compression`
+-- |   * compression codec
+-- |   * default: `CompressionTypeNone`
 -- | * `topicMessages`
 -- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
   { acks :: Data.Maybe.Maybe Acks
+  , compression :: Data.Maybe.Maybe CompressionType
   , topicMessages :: Array TopicMessages
   }
 
@@ -110,15 +132,16 @@ type ProducerBatch =
 -- |
 -- | Optional
 -- | * `acks?: number`
+-- | * `compression?: CompressionTypes`
 -- | * `topicMessages?: TopicMessages[]`
 -- |
 -- | Unsupported
--- | * `compression?: CompressionTypes`
 -- | * `timeout?: number`
 type ProducerBatchImpl =
   Kafka.FFI.Object
     ()
     ( acks :: AcksImpl
+    , compression :: CompressionTypeImpl
     , topicMessages :: Array TopicMessagesImpl
     )
 
@@ -144,12 +167,16 @@ type ProducerConfigImpl =
 -- | * `acks`
 -- |   * Control the number of required acks.
 -- |   * default: `AcksAll`
+-- | * `compression`
+-- |   * compression codec
+-- |   * default: `CompressionTypeNone`
 -- | * `messages`
 -- |   * a list of messages to be sent
 -- | * `topic`
 -- |   * topic name
 type ProducerRecord =
   { acks :: Data.Maybe.Maybe Acks
+  , compression :: Data.Maybe.Maybe CompressionType
   , messages :: Array Message
   , topic :: String
   }
@@ -276,6 +303,7 @@ producer kafka config =
 send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
 send producer' x = sendBatch producer'
   { acks: x.acks
+  , compression: x.compression
   , topicMessages: Data.Array.singleton topicMessages
   }
   where
@@ -315,6 +343,15 @@ sendBatch producer' producerBatch = do
     AcksNo -> 0
     AcksLeader -> 1
 
+  -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
+  -- |
+  -- | None = 0
+  -- | GZIP = 1
+  toCompressionTypeImpl :: CompressionType -> CompressionTypeImpl
+  toCompressionTypeImpl = case _ of
+    CompressionTypeNone -> 0
+    CompressionTypeGzip -> 1
+
   toMessageImpl :: Message -> MessageImpl
   toMessageImpl x = Kafka.FFI.objectFromRecord
     { headers: x.headers
@@ -329,6 +366,7 @@ sendBatch producer' producerBatch = do
   toProducerBatchImpl :: ProducerBatch -> ProducerBatchImpl
   toProducerBatchImpl x = Kafka.FFI.objectFromRecord
     { acks: toAcksImpl <$> x.acks
+    , compression: toCompressionTypeImpl <$> x.compression
     , topicMessages: toTopicMessagesImpl <$> x.topicMessages
     }
 
