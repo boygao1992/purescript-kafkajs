@@ -34,6 +34,7 @@ import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
 
 -- | Control the number of required acks.
+-- | Acks is shorthand for acknowledgments, the number of brokers (leader/follower replicas) that must receive the message before the write is considered as successful.
 -- | * `AcksAll`
 -- |   * all insync replicas must acknowledge
 -- | * `AcksNo`
