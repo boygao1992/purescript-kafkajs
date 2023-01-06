@@ -135,7 +135,7 @@ foreign import data Producer :: Type
 -- |   * default: `CompressionTypeNone`
 -- | * `timeout`
 -- |   * The time to await a response in ms
--- |   * default: `30000`
+-- |   * default: `Milliseconds 30000`
 -- | * `topicMessages`
 -- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
@@ -174,10 +174,10 @@ type ProducerBatchImpl =
 -- |   * default: `Nothing`
 -- | * `metadataMaxAge`
 -- |   * The period of time in milliseconds after which we force a refresh of metadata even if we haven't seen any partition leadership changes to proactively discover any new brokers or partitions
--- |   * default: `300000`
+-- |   * default: `Milliseconds 300000`
 -- | * `transactionTimeout`
 -- |   * The maximum amount of time in ms that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction. If this value is larger than the `transaction.max.timeout.ms` setting in the broker, the request will fail with a `InvalidTransactionTimeout` error
--- |   * default: `60000`
+-- |   * default: `Milliseconds 60000`
 -- | * `transactionalId`
 -- |   * The `transactionalId` allows Kafka to fence out zombie instances by rejecting writes from producers with the same `transactionalId`, allowing only writes from the most recently registered producer. To ensure EoS (Exactly-once Semantics) in a stream processing application, it is important that the `transactionalId` is always the same for a given input topic and partition in the read-process-write cycle.
 -- |   * see [Choosing a `transactionalId`](https://kafka.js.org/docs/transactions#choosing-a-transactionalid)
@@ -226,7 +226,7 @@ type ProducerConfigImpl =
 -- |   * a list of messages to be sent
 -- | * `timeout`
 -- |   * The time to await a response in ms
--- |   * default: `30000`
+-- |   * default: `Milliseconds 30000`
 -- | * `topic`
 -- |   * topic name
 type ProducerRecord =
