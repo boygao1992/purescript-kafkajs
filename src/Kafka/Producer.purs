@@ -51,9 +51,24 @@ derive instance ordAcks :: Ord Acks
 
 type AcksImpl = Int
 
+-- | See [Compression](https://kafka.js.org/docs/producing#a-name-compression-a-compression)
+-- |
+-- | * `CompressionTypeNone`
+-- |   * no compression
+-- | * `CompressionTypeGzip`
+-- |   * natively supported by Kafka
+-- | * `CompressionTypeSnappy`
+-- |   * need to install `kafkajs-snappy` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
+-- | * `CompressionTypeLz4`
+-- |   * need to install `kafkajs-lz4` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
+-- | * `CompressionTypeZstd`
+-- |   * need to install `@kafkajs/zstd` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
 data CompressionType
   = CompressionTypeNone
   | CompressionTypeGzip
+  | CompressionTypeSnappy
+  | CompressionTypeLz4
+  | CompressionTypeZstd
 
 derive instance eqCompressionType :: Eq CompressionType
 derive instance ordCompressionType :: Ord CompressionType
@@ -63,9 +78,6 @@ derive instance ordCompressionType :: Ord CompressionType
 -- |
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
 -- | `Compression.Types`
--- |
--- | NOTE only `GZIP` is implemented
--- | see [`Compression.Codecs`](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L13-L24)
 type CompressionTypeImpl = Int
 
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
@@ -401,10 +413,16 @@ sendBatch producer' producerBatch = do
   -- |
   -- | None = 0
   -- | GZIP = 1
+  -- | Snappy = 2
+  -- | LZ4 = 3
+  -- | ZSTD = 4
   toCompressionTypeImpl :: CompressionType -> CompressionTypeImpl
   toCompressionTypeImpl = case _ of
     CompressionTypeNone -> 0
     CompressionTypeGzip -> 1
+    CompressionTypeSnappy -> 2
+    CompressionTypeLz4 -> 3
+    CompressionTypeZstd -> 4
 
   toMessageImpl :: Message -> MessageImpl
   toMessageImpl x = Kafka.FFI.objectFromRecord
