@@ -167,11 +167,11 @@ type ProducerBatchImpl =
 -- |   * Allow topic creation when querying metadata for non-existent topics
 -- |   * default: `true`
 -- | * `idempotent`
--- |   * If enabled producer will ensure each message is written exactly once. Acks must be set to `-1` ("all"). Retries will default to `MAX_SAFE_INTEGER`.
+-- |   * If enabled producer will ensure each message is written exactly once. Acks must be set to `AcksAll`. Retries will default to `MAX_SAFE_INTEGER`.
 -- |   * default: `false`
 -- | * `maxInFlightRequests`
--- |   * Max number of requests that may be in progress at any time. If falsey then no limit.
--- |   * default: `null` (no limit)
+-- |   * Max number of requests that may be in progress at any time. If `Nothing` then no limit.
+-- |   * default: `Nothing`
 -- | * `metadataMaxAge`
 -- |   * The period of time in milliseconds after which we force a refresh of metadata even if we haven't seen any partition leadership changes to proactively discover any new brokers or partitions
 -- |   * default: `300000`
