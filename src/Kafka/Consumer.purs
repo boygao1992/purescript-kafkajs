@@ -291,7 +291,7 @@ type EachBatchPayloadImpl =
   , isStale :: Effect.Effect Boolean
   , pause :: Effect.Effect (Effect.Effect Unit)
   , resolveOffset :: Effect.Uncurried.EffectFn1 String Unit
-  , uncommittedOffsets :: Effect.Effect OffsetsByTopicParitionImpl
+  , uncommittedOffsets :: Effect.Effect OffsetsByTopicParition
   }
 
 type EachMessageHandler =
@@ -431,30 +431,21 @@ type Offsets =
 type OffsetsImpl =
   Kafka.FFI.Object
     ()
-    ( topics :: Array TopicOffsetsImpl
+    ( topics :: Array TopicOffsets
     )
-
-type OffsetsByTopicParition =
-  { topics :: Array TopicOffsets
-  }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L843
 -- |
 -- | `topics: TopicOffsets[]`
-type OffsetsByTopicParitionImpl =
-  { topics :: Array TopicOffsetsImpl
-  }
-
-type PartitionOffset =
-  { offset :: String
-  , partition :: Int
+type OffsetsByTopicParition =
+  { topics :: Array TopicOffsets
   }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L650
 -- |
 -- | * `offset: string`
 -- | * `partition: number`
-type PartitionOffsetsImpl =
+type PartitionOffset =
   { offset :: String
   , partition :: Int
   }
@@ -463,17 +454,12 @@ data Topic
   = TopicName String
   | TopicRegex Data.String.Regex.Regex
 
-type TopicOffsets =
-  { partitions :: Array PartitionOffset
-  , topic :: String
-  }
-
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L655
 -- |
 -- | * `partitions: PartitionOffset[]`
 -- | * `topic: string`
-type TopicOffsetsImpl =
-  { partitions :: Array PartitionOffsetsImpl
+type TopicOffsets =
+  { partitions :: Array PartitionOffset
   , topic :: String
   }
 

@@ -1,13 +1,17 @@
 module Kafka.Transaction
-  ( ProducerBatch
+  ( Offsets
+  , ProducerBatch
   , ProducerConfig
   , ProducerRecord
+  , PartitionOffset
   , Transaction
+  , TopicOffsets
   , abort
   , commit
   , producer
   , send
   , sendBatch
+  , sendOffsets
   , transaction
   ) where
 
@@ -22,6 +26,26 @@ import Effect.Uncurried as Effect.Uncurried
 import Kafka.Kafka as Kafka.Kafka
 import Kafka.Producer as Kafka.Producer
 import Record as Record
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L821
+-- | `offsets: Offsets & { consumerGroupId: string }`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L660
+-- | `Offsets`
+-- | * `topics: TopicOffsets[]`
+type Offsets =
+  { topics :: Array TopicOffsets
+  , consumerGroupId :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L650
+-- |
+-- | * `offset: string`
+-- | * `partition: number`
+type PartitionOffset =
+  { offset :: String
+  , partition :: Int
+  }
 
 -- | `Kafka.Producer.ProducerBatch` with the following defaults
 -- | * `acks` set to `AcksAll`
@@ -57,6 +81,15 @@ type ProducerRecord =
   { compression :: Data.Maybe.Maybe Kafka.Producer.CompressionType
   , messages :: Array Kafka.Producer.Message
   , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , topic :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L655
+-- |
+-- | * `partitions: PartitionOffset[]`
+-- | * `topic: string`
+type TopicOffsets =
+  { partitions :: Array PartitionOffset
   , topic :: String
   }
 
@@ -105,6 +138,22 @@ sendBatch producer' producerBatch =
   Kafka.Producer.sendBatch producer'
     $ Record.disjointUnion producerBatch
         { acks: Data.Maybe.Just Kafka.Producer.AcksAll }
+
+foreign import _sendOffsets ::
+  Effect.Uncurried.EffectFn2
+    Transaction
+    Offsets
+    (Control.Promise.Promise Unit)
+
+-- | Commit topic-partition offsets to a Consumer Group if the transaction succeeds.
+-- | See [Sending Offsets](https://kafka.js.org/docs/transactions#a-name-offsets-a-sending-offsets)
+sendOffsets ::
+  Transaction ->
+  Offsets ->
+  Effect.Aff.Aff Unit
+sendOffsets transaction' offsets =
+  Control.Promise.toAffE
+    $ Effect.Uncurried.runEffectFn2 _sendOffsets transaction' offsets
 
 foreign import _transaction ::
   Effect.Uncurried.EffectFn1
