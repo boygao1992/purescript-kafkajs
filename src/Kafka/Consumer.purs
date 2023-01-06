@@ -141,6 +141,10 @@ type ConsumerConfigImpl =
 -- | * `autoCommit`
 -- |   * auto commit offsets periodically during a batch
 -- |   * see [autoCommit](https://kafka.js.org/docs/consuming#a-name-auto-commit-a-autocommit)
+-- |   * `interval`
+-- |     * The consumer will commit offsets after a given period
+-- |   * `threshold`
+-- |     * The consumer will commit offsets after resolving a given number of messages
 -- | * `eachBatch`
 -- |   * `autoResolve`
 -- |     * auto commit offsets after successful `eachBatch`
@@ -154,8 +158,8 @@ type ConsumerConfigImpl =
 type ConsumerRunConfig =
   { autoCommit ::
       Data.Maybe.Maybe
-        { autoCommitInterval :: Data.Maybe.Maybe Number
-        , autoCommitThreshold :: Data.Maybe.Maybe Number
+        { interval :: Data.Maybe.Maybe Effect.Aff.Milliseconds
+        , threshold :: Data.Maybe.Maybe Int
         }
   , consume :: Consume
   , partitionsConsumedConcurrently :: Data.Maybe.Maybe Int
@@ -178,7 +182,7 @@ type ConsumerRunConfigImpl =
     ()
     ( autoCommit :: Boolean
     , autoCommitInterval :: Number
-    , autoCommitThreshold :: Number
+    , autoCommitThreshold :: Int
     , eachBatch :: EachBatchHandlerImpl
     , eachBatchAutoResolve :: Boolean
     , eachMessage :: EachMessageHandlerImpl
@@ -582,8 +586,12 @@ run consumer' consumerRunConfig =
   toConsumerRunConfigImpl :: ConsumerRunConfig -> ConsumerRunConfigImpl
   toConsumerRunConfigImpl x = Kafka.FFI.objectFromRecord
     { autoCommit: Data.Maybe.isJust x.autoCommit
-    , autoCommitInterval: x.autoCommit >>= _.autoCommitInterval
-    , autoCommitThreshold: x.autoCommit >>= _.autoCommitThreshold
+    , autoCommitInterval: do
+        autoCommit <- x.autoCommit
+        interval <- autoCommit.interval
+        pure case interval of
+          Effect.Aff.Milliseconds ms -> ms
+    , autoCommitThreshold: x.autoCommit >>= _.threshold
     , eachBatch: case x.consume of
         EachBatch eachBatch -> Data.Maybe.Just $
           toEachBatchHandlerImpl eachBatch.handler
