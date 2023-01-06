@@ -148,22 +148,58 @@ type ProducerBatchImpl =
     , topicMessages :: Array TopicMessagesImpl
     )
 
+-- | see [Options](https://kafka.js.org/docs/producing#options)
+-- |
+-- | * `allowAutoTopicCreation`
+-- |   * Allow topic creation when querying metadata for non-existent topics
+-- |   * default: `true`
+-- | * `idempotent`
+-- |   * If enabled producer will ensure each message is written exactly once. Acks must be set to `-1` ("all"). Retries will default to `MAX_SAFE_INTEGER`.
+-- |   * default: `false`
+-- | * `maxInFlightRequests`
+-- |   * Max number of requests that may be in progress at any time. If falsey then no limit.
+-- |   * default: `null` (no limit)
+-- | * `metadataMaxAge`
+-- |   * The period of time in milliseconds after which we force a refresh of metadata even if we haven't seen any partition leadership changes to proactively discover any new brokers or partitions
+-- |   * default: `300000`
+-- | * `transactionTimeout`
+-- |   * The maximum amount of time in ms that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction. If this value is larger than the `transaction.max.timeout.ms` setting in the broker, the request will fail with a `InvalidTransactionTimeout` error
+-- |   * default: `60000`
+-- | * `transactionalId`
+-- |   * The `transactionalId` allows Kafka to fence out zombie instances by rejecting writes from producers with the same `transactionalId`, allowing only writes from the most recently registered producer. To ensure EoS (Exactly-once Semantics) in a stream processing application, it is important that the `transactionalId` is always the same for a given input topic and partition in the read-process-write cycle.
+-- |   * see [Choosing a `transactionalId`](https://kafka.js.org/docs/transactions#choosing-a-transactionalid)
 type ProducerConfig =
-  {}
+  { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
+  , idempotent :: Data.Maybe.Maybe Boolean
+  , maxInFlightRequests :: Data.Maybe.Maybe Int
+  , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , transactionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , transactionalId :: Data.Maybe.Maybe String
+  }
 
 -- | https://github.com/tulios/kafkajs/blob/v2.2.3/types/index.d.ts#L98
 -- |
--- | Unsupported
+-- | Optional
 -- | * `allowAutoTopicCreation?: boolean`
--- | * `createPartitioner?: ICustomPartitioner`
 -- | * `idempotent?: boolean`
 -- | * `maxInFlightRequests?: number`
 -- | * `metadataMaxAge?: number`
--- | * `retry?: RetryOptions`
 -- | * `transactionTimeout?: number`
 -- | * `transactionalId?: string`
+-- |
+-- | Unsupported
+-- | * `createPartitioner?: ICustomPartitioner`
+-- | * `retry?: RetryOptions`
 type ProducerConfigImpl =
-  {}
+  Kafka.FFI.Object
+    ()
+    ( allowAutoTopicCreation :: Boolean
+    , idempotent :: Boolean
+    , maxInFlightRequests :: Int
+    , metadataMaxAge :: Number
+    , transactionTimeout :: Number
+    , transactionalId :: String
+    )
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L729
 -- |
@@ -302,7 +338,16 @@ producer kafka config =
     $ toProducerConfigImpl config
   where
   toProducerConfigImpl :: ProducerConfig -> ProducerConfigImpl
-  toProducerConfigImpl x = x
+  toProducerConfigImpl x = Kafka.FFI.objectFromRecord
+    { allowAutoTopicCreation: x.allowAutoTopicCreation
+    , idempotent: x.idempotent
+    , maxInFlightRequests: x.maxInFlightRequests
+    , metadataMaxAge: x.metadataMaxAge <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , transactionTimeout: x.transactionTimeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , transactionalId: x.transactionalId
+    }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/producer/messageProducer.js#L118
 -- |
