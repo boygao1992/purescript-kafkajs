@@ -198,16 +198,26 @@ testSuite = do
         }
       Test.Unit.Assert.assert "Topic is already created" created
     producer <- Effect.Class.liftEffect $
-      Kafka.Producer.producer kafka {}
+      Kafka.Producer.producer kafka
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , idempotent: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , transactionTimeout: Data.Maybe.Nothing
+        , transactionalId: Data.Maybe.Nothing
+        }
     Effect.Aff.bracket (Kafka.Producer.connect producer) (\_ -> Kafka.Producer.disconnect producer) \_ -> do
       void $ Kafka.Producer.send producer
-        { messages: messages <#> \message ->
+        { acks: Data.Maybe.Nothing
+        , compression: Data.Maybe.Nothing
+        , messages: messages <#> \message ->
             { headers: Data.Maybe.Nothing
             , key: Data.Maybe.Just $ Kafka.Producer.String message.key
             , partition: Data.Maybe.Nothing
             , timestamp: Data.Maybe.Nothing
             , value: Data.Maybe.Just $ Kafka.Producer.String message.value
             }
+        , timeout: Data.Maybe.Nothing
         , topic
         }
     receivedRef <- Effect.Class.liftEffect $

@@ -1,5 +1,7 @@
 module Kafka.Producer
-  ( Message
+  ( Acks(..)
+  , CompressionType(..)
+  , Message
   , Producer
   , ProducerBatch
   , ProducerConfig
@@ -30,6 +32,53 @@ import Kafka.Kafka as Kafka.Kafka
 import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
+
+-- | Control the number of required acks.
+-- | Acks is shorthand for acknowledgments, the number of brokers (leader/follower replicas) that must receive the message before the write is considered as successful.
+-- | * `AcksAll`
+-- |   * all insync replicas must acknowledge
+-- | * `AcksNo`
+-- |   * no acknowledgments
+-- | * `AcksLeader`
+-- |   * only waits for the leader to acknowledge
+data Acks
+  = AcksAll
+  | AcksNo
+  | AcksLeader
+
+derive instance eqAcks :: Eq Acks
+derive instance ordAcks :: Ord Acks
+
+type AcksImpl = Int
+
+-- | See [Compression](https://kafka.js.org/docs/producing#a-name-compression-a-compression)
+-- |
+-- | * `CompressionTypeNone`
+-- |   * no compression
+-- | * `CompressionTypeGzip`
+-- |   * natively supported by Kafka
+-- | * `CompressionTypeSnappy`
+-- |   * need to install `kafkajs-snappy` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
+-- | * `CompressionTypeLz4`
+-- |   * need to install `kafkajs-lz4` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
+-- | * `CompressionTypeZstd`
+-- |   * need to install `@kafkajs/zstd` on `npm` and follow the instructions there to mutate `CompressionCodecs` object in `kafkajs`
+data CompressionType
+  = CompressionTypeNone
+  | CompressionTypeGzip
+  | CompressionTypeSnappy
+  | CompressionTypeLz4
+  | CompressionTypeZstd
+
+derive instance eqCompressionType :: Eq CompressionType
+derive instance ordCompressionType :: Ord CompressionType
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1116
+-- | `CompressionTypes`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
+-- | `Compression.Types`
+type CompressionTypeImpl = Int
 
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
 -- |
@@ -78,42 +127,113 @@ type MessageImpl =
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787
 foreign import data Producer :: Type
 
+-- | * `acks`
+-- |   * Control the number of required acks.
+-- |   * default: `AcksAll`
+-- | * `compression`
+-- |   * compression codec
+-- |   * default: `CompressionTypeNone`
+-- | * `timeout`
+-- |   * The time to await a response in ms
+-- |   * default: `Milliseconds 30000`
 -- | * `topicMessages`
 -- |   * a list of topics and for each topic a list of messages
 type ProducerBatch =
-  { topicMessages :: Array TopicMessages
+  { acks :: Data.Maybe.Maybe Acks
+  , compression :: Data.Maybe.Maybe CompressionType
+  , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , topicMessages :: Array TopicMessages
   }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L753
 -- |
 -- | Optional
+-- | * `acks?: number`
+-- | * `compression?: CompressionTypes`
+-- | * `timeout?: number`
 -- | * `topicMessages?: TopicMessages[]`
 type ProducerBatchImpl =
   Kafka.FFI.Object
     ()
-    ( topicMessages :: Array TopicMessagesImpl
+    ( acks :: AcksImpl
+    , compression :: CompressionTypeImpl
+    , timeout :: Number
+    , topicMessages :: Array TopicMessagesImpl
     )
 
+-- | see [Options](https://kafka.js.org/docs/producing#options)
+-- |
+-- | * `allowAutoTopicCreation`
+-- |   * Allow topic creation when querying metadata for non-existent topics
+-- |   * default: `true`
+-- | * `idempotent`
+-- |   * If enabled producer will ensure each message is written exactly once. Acks must be set to `AcksAll`. Retries will default to `MAX_SAFE_INTEGER`.
+-- |   * default: `false`
+-- | * `maxInFlightRequests`
+-- |   * Max number of requests that may be in progress at any time. If `Nothing` then no limit.
+-- |   * default: `Nothing`
+-- | * `metadataMaxAge`
+-- |   * The period of time in milliseconds after which we force a refresh of metadata even if we haven't seen any partition leadership changes to proactively discover any new brokers or partitions
+-- |   * default: `Milliseconds 300000`
+-- | * `transactionTimeout`
+-- |   * The maximum amount of time in ms that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction. If this value is larger than the `transaction.max.timeout.ms` setting in the broker, the request will fail with a `InvalidTransactionTimeout` error
+-- |   * default: `Milliseconds 60000`
+-- | * `transactionalId`
+-- |   * The `transactionalId` allows Kafka to fence out zombie instances by rejecting writes from producers with the same `transactionalId`, allowing only writes from the most recently registered producer. To ensure EoS (Exactly-once Semantics) in a stream processing application, it is important that the `transactionalId` is always the same for a given input topic and partition in the read-process-write cycle.
+-- |   * see [Choosing a `transactionalId`](https://kafka.js.org/docs/transactions#choosing-a-transactionalid)
 type ProducerConfig =
-  {}
+  { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
+  , idempotent :: Data.Maybe.Maybe Boolean
+  , maxInFlightRequests :: Data.Maybe.Maybe Int
+  , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , transactionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , transactionalId :: Data.Maybe.Maybe String
+  }
 
 -- | https://github.com/tulios/kafkajs/blob/v2.2.3/types/index.d.ts#L98
 -- |
--- | Unsupported
+-- | Optional
 -- | * `allowAutoTopicCreation?: boolean`
--- | * `createPartitioner?: ICustomPartitioner`
 -- | * `idempotent?: boolean`
 -- | * `maxInFlightRequests?: number`
 -- | * `metadataMaxAge?: number`
--- | * `retry?: RetryOptions`
 -- | * `transactionTimeout?: number`
 -- | * `transactionalId?: string`
+-- |
+-- | Unsupported
+-- | * `createPartitioner?: ICustomPartitioner`
+-- | * `retry?: RetryOptions`
 type ProducerConfigImpl =
-  {}
+  Kafka.FFI.Object
+    ()
+    ( allowAutoTopicCreation :: Boolean
+    , idempotent :: Boolean
+    , maxInFlightRequests :: Int
+    , metadataMaxAge :: Number
+    , transactionTimeout :: Number
+    , transactionalId :: String
+    )
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L729
+-- |
+-- | * `acks`
+-- |   * Control the number of required acks.
+-- |   * default: `AcksAll`
+-- | * `compression`
+-- |   * compression codec
+-- |   * default: `CompressionTypeNone`
+-- | * `messages`
+-- |   * a list of messages to be sent
+-- | * `timeout`
+-- |   * The time to await a response in ms
+-- |   * default: `Milliseconds 30000`
+-- | * `topic`
+-- |   * topic name
 type ProducerRecord =
-  { messages :: Array Message
+  { acks :: Data.Maybe.Maybe Acks
+  , compression :: Data.Maybe.Maybe CompressionType
+  , messages :: Array Message
+  , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , topic :: String
   }
 
@@ -231,14 +351,26 @@ producer kafka config =
     $ toProducerConfigImpl config
   where
   toProducerConfigImpl :: ProducerConfig -> ProducerConfigImpl
-  toProducerConfigImpl x = x
+  toProducerConfigImpl x = Kafka.FFI.objectFromRecord
+    { allowAutoTopicCreation: x.allowAutoTopicCreation
+    , idempotent: x.idempotent
+    , maxInFlightRequests: x.maxInFlightRequests
+    , metadataMaxAge: x.metadataMaxAge <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , transactionTimeout: x.transactionTimeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , transactionalId: x.transactionalId
+    }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/producer/messageProducer.js#L118
 -- |
 -- | NOTE logic is very simple so instead of FFI we rewrite in PS
 send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
 send producer' x = sendBatch producer'
-  { topicMessages: Data.Array.singleton topicMessages
+  { acks: x.acks
+  , compression: x.compression
+  , timeout: x.timeout
+  , topicMessages: Data.Array.singleton topicMessages
   }
   where
   topicMessages :: TopicMessages
@@ -266,6 +398,32 @@ sendBatch producer' producerBatch = do
   fromRecordMetadataImpl :: RecordMetadataImpl -> RecordMetadata
   fromRecordMetadataImpl = Kafka.FFI.objectToRecord
 
+  -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/producer/messageProducer.js#L43-L46
+  -- |
+  -- | -1 = all replicas must acknowledge
+  -- |  0 = no acknowledgments
+  -- |  1 = only waits for the leader to acknowledge
+  toAcksImpl :: Acks -> AcksImpl
+  toAcksImpl = case _ of
+    AcksAll -> -1
+    AcksNo -> 0
+    AcksLeader -> 1
+
+  -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
+  -- |
+  -- | None = 0
+  -- | GZIP = 1
+  -- | Snappy = 2
+  -- | LZ4 = 3
+  -- | ZSTD = 4
+  toCompressionTypeImpl :: CompressionType -> CompressionTypeImpl
+  toCompressionTypeImpl = case _ of
+    CompressionTypeNone -> 0
+    CompressionTypeGzip -> 1
+    CompressionTypeSnappy -> 2
+    CompressionTypeLz4 -> 3
+    CompressionTypeZstd -> 4
+
   toMessageImpl :: Message -> MessageImpl
   toMessageImpl x = Kafka.FFI.objectFromRecord
     { headers: x.headers
@@ -279,7 +437,11 @@ sendBatch producer' producerBatch = do
 
   toProducerBatchImpl :: ProducerBatch -> ProducerBatchImpl
   toProducerBatchImpl x = Kafka.FFI.objectFromRecord
-    { topicMessages: toTopicMessagesImpl <$> x.topicMessages
+    { acks: toAcksImpl <$> x.acks
+    , compression: toCompressionTypeImpl <$> x.compression
+    , timeout: x.timeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , topicMessages: toTopicMessagesImpl <$> x.topicMessages
     }
 
   toTopicMessagesImpl :: TopicMessages -> TopicMessagesImpl

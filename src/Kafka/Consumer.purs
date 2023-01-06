@@ -141,6 +141,10 @@ type ConsumerConfigImpl =
 -- | * `autoCommit`
 -- |   * auto commit offsets periodically during a batch
 -- |   * see [autoCommit](https://kafka.js.org/docs/consuming#a-name-auto-commit-a-autocommit)
+-- |   * `interval`
+-- |     * The consumer will commit offsets after a given period
+-- |   * `threshold`
+-- |     * The consumer will commit offsets after resolving a given number of messages
 -- | * `eachBatch`
 -- |   * `autoResolve`
 -- |     * auto commit offsets after successful `eachBatch`
@@ -154,8 +158,8 @@ type ConsumerConfigImpl =
 type ConsumerRunConfig =
   { autoCommit ::
       Data.Maybe.Maybe
-        { autoCommitInterval :: Data.Maybe.Maybe Number
-        , autoCommitThreshold :: Data.Maybe.Maybe Number
+        { interval :: Data.Maybe.Maybe Effect.Aff.Milliseconds
+        , threshold :: Data.Maybe.Maybe Int
         }
   , consume :: Consume
   , partitionsConsumedConcurrently :: Data.Maybe.Maybe Int
@@ -178,7 +182,7 @@ type ConsumerRunConfigImpl =
     ()
     ( autoCommit :: Boolean
     , autoCommitInterval :: Number
-    , autoCommitThreshold :: Number
+    , autoCommitThreshold :: Int
     , eachBatch :: EachBatchHandlerImpl
     , eachBatchAutoResolve :: Boolean
     , eachMessage :: EachMessageHandlerImpl
@@ -291,7 +295,7 @@ type EachBatchPayloadImpl =
   , isStale :: Effect.Effect Boolean
   , pause :: Effect.Effect (Effect.Effect Unit)
   , resolveOffset :: Effect.Uncurried.EffectFn1 String Unit
-  , uncommittedOffsets :: Effect.Effect OffsetsByTopicParitionImpl
+  , uncommittedOffsets :: Effect.Effect OffsetsByTopicParition
   }
 
 type EachMessageHandler =
@@ -431,30 +435,21 @@ type Offsets =
 type OffsetsImpl =
   Kafka.FFI.Object
     ()
-    ( topics :: Array TopicOffsetsImpl
+    ( topics :: Array TopicOffsets
     )
-
-type OffsetsByTopicParition =
-  { topics :: Array TopicOffsets
-  }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L843
 -- |
 -- | `topics: TopicOffsets[]`
-type OffsetsByTopicParitionImpl =
-  { topics :: Array TopicOffsetsImpl
-  }
-
-type PartitionOffset =
-  { offset :: String
-  , partition :: Int
+type OffsetsByTopicParition =
+  { topics :: Array TopicOffsets
   }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L650
 -- |
 -- | * `offset: string`
 -- | * `partition: number`
-type PartitionOffsetsImpl =
+type PartitionOffset =
   { offset :: String
   , partition :: Int
   }
@@ -463,17 +458,12 @@ data Topic
   = TopicName String
   | TopicRegex Data.String.Regex.Regex
 
-type TopicOffsets =
-  { partitions :: Array PartitionOffset
-  , topic :: String
-  }
-
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L655
 -- |
 -- | * `partitions: PartitionOffset[]`
 -- | * `topic: string`
-type TopicOffsetsImpl =
-  { partitions :: Array PartitionOffsetsImpl
+type TopicOffsets =
+  { partitions :: Array PartitionOffset
   , topic :: String
   }
 
@@ -596,8 +586,12 @@ run consumer' consumerRunConfig =
   toConsumerRunConfigImpl :: ConsumerRunConfig -> ConsumerRunConfigImpl
   toConsumerRunConfigImpl x = Kafka.FFI.objectFromRecord
     { autoCommit: Data.Maybe.isJust x.autoCommit
-    , autoCommitInterval: x.autoCommit >>= _.autoCommitInterval
-    , autoCommitThreshold: x.autoCommit >>= _.autoCommitThreshold
+    , autoCommitInterval: do
+        autoCommit <- x.autoCommit
+        interval <- autoCommit.interval
+        pure case interval of
+          Effect.Aff.Milliseconds ms -> ms
+    , autoCommitThreshold: x.autoCommit >>= _.threshold
     , eachBatch: case x.consume of
         EachBatch eachBatch -> Data.Maybe.Just $
           toEachBatchHandlerImpl eachBatch.handler
