@@ -16,6 +16,10 @@ exports._run = function _run(consumer, config) {
   return consumer.run(config);
 };
 
+exports._seek = function _seek(consumer, topicPartitionOffset) {
+  return consumer.seek(topicPartitionOffset);
+};
+
 exports._subscribe = function _subscribe(consumer, subscription) {
   return consumer.subscribe(subscription);
 };

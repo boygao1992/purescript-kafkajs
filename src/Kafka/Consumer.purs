@@ -12,10 +12,12 @@ module Kafka.Consumer
   , PartitionOffset
   , Topic(..)
   , TopicOffsets
+  , TopicPartitionOffset
   , connect
   , consumer
   , disconnect
   , run
+  , seek
   , subscribe
   ) where
 
@@ -467,6 +469,21 @@ type TopicOffsets =
   , topic :: String
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L869
+-- | 
+-- | `TopicPartition & { offset: string }`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L865
+-- | 
+-- | `TopicPartition`
+-- | * `topic: string`
+-- | * `partition: number`
+type TopicPartitionOffset =
+  { offset :: String
+  , partition :: Int
+  , topic :: String
+  }
+
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1033
 -- |
 -- | `connect(): Promise<void>`
@@ -619,6 +636,19 @@ run consumer' consumerRunConfig =
       Control.Promise.fromAff
         $ eachMessageHandler
         $ fromEachMessagePayloadImpl eachMessagePayloadImpl
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1039
+-- |
+-- | `seek(topicPartitionOffset: TopicPartitionOffset): void`
+foreign import _seek ::
+  Effect.Uncurried.EffectFn2
+    Consumer
+    TopicPartitionOffset
+    Unit
+
+seek :: Consumer -> TopicPartitionOffset -> Effect.Effect Unit
+seek consumer' topicPartitionOffset =
+  Effect.Uncurried.runEffectFn2 _seek consumer' topicPartitionOffset
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1035
 -- |
