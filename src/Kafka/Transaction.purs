@@ -93,8 +93,12 @@ type TopicOffsets =
   , topic :: String
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L820
 foreign import data Transaction :: Type
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L823
+-- |
+-- | `abort(): Promise<void>`
 foreign import _abort ::
   Effect.Uncurried.EffectFn1
     Transaction
@@ -105,6 +109,9 @@ abort transaction' =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn1 _abort transaction'
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L822
+-- |
+-- | `commit(): Promise<void>`
 foreign import _commit ::
   Effect.Uncurried.EffectFn1
     Transaction
@@ -139,6 +146,9 @@ sendBatch producer' producerBatch =
     $ Record.disjointUnion producerBatch
         { acks: Data.Maybe.Just Kafka.Producer.AcksAll }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L821
+-- |
+-- | `sendOffsets(offsets: Offsets & { consumerGroupId: string }): Promise<void>`
 foreign import _sendOffsets ::
   Effect.Uncurried.EffectFn2
     Transaction
@@ -155,6 +165,9 @@ sendOffsets transaction' offsets =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn2 _sendOffsets transaction' offsets
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L816
+-- |
+-- | `transaction(): Promise<Transaction>`
 foreign import _transaction ::
   Effect.Uncurried.EffectFn1
     Kafka.Producer.Producer
