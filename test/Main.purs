@@ -172,6 +172,133 @@ sleep seconds = do
 suiteMain :: Test.Unit.TestSuite
 suiteMain = do
   testProduceConsumeRoundtrip
+  Test.Unit.suite "Kafka.Consumer" do
+    Test.Unit.suite "Kafka.Consumer.seek" do
+      testConsumerSeekWithTwoPartitions
+
+testConsumerSeekWithTwoPartitions :: Test.Unit.TestSuite
+testConsumerSeekWithTwoPartitions =
+  Test.Unit.test "with two partitions" do
+    let
+      groupId :: String
+      groupId = "testConsumerSeekWithTwoPartitions-groupId"
+
+      messages :: Array { key :: String, partition :: Int, value :: String }
+      messages =
+        [ { key: "key-1", partition: 0, value: "value-A" }
+        , { key: "key-2", partition: 1, value: "value-B" }
+        , { key: "key-3", partition: 0, value: "value-C" }
+        , { key: "key-4", partition: 1, value: "value-D" }
+        , { key: "key-5", partition: 0, value: "value-E" }
+        , { key: "key-6", partition: 1, value: "value-F" }
+        ]
+
+      numPartitions :: Int
+      numPartitions = 2
+
+      topic :: String
+      topic = "testConsumerSeekWithTwoPartitions-topic"
+
+      topicPartitionOffsets :: Array Kafka.Consumer.TopicPartitionOffset
+      topicPartitionOffsets =
+        [ { offset: "1", partition: 0, topic }
+        , { offset: "2", partition: 1, topic }
+        ]
+    kafka <- newKafka
+    admin <- Effect.Class.liftEffect $
+      Kafka.Admin.admin kafka {}
+    Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
+      created <- Kafka.Admin.createTopics admin
+        { timeout: Data.Maybe.Nothing
+        , topics:
+            [ { numPartitions: Data.Maybe.Just numPartitions
+              , replicationFactor: Data.Maybe.Just 3
+              , topic
+              }
+            ]
+        , validateOnly: Data.Maybe.Nothing
+        , waitForLeaders: Data.Maybe.Nothing
+        }
+      Test.Unit.Assert.assert "Topic is already created" created
+    producer <- Effect.Class.liftEffect $
+      Kafka.Producer.producer kafka
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , idempotent: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , transactionTimeout: Data.Maybe.Nothing
+        , transactionalId: Data.Maybe.Nothing
+        }
+    Effect.Aff.bracket (Kafka.Producer.connect producer) (\_ -> Kafka.Producer.disconnect producer) \_ -> do
+      void $ Kafka.Producer.send producer
+        { acks: Data.Maybe.Nothing
+        , compression: Data.Maybe.Nothing
+        , messages: messages <#> \message ->
+            { headers: Data.Maybe.Nothing
+            , key: Data.Maybe.Just $ Kafka.Producer.String message.key
+            , partition: Data.Maybe.Just message.partition
+            , timestamp: Data.Maybe.Nothing
+            , value: Data.Maybe.Just $ Kafka.Producer.String message.value
+            }
+        , timeout: Data.Maybe.Nothing
+        , topic
+        }
+    receivedRef <- Effect.Class.liftEffect $
+      Effect.Ref.new []
+    consumer <- Effect.Class.liftEffect $
+      Kafka.Consumer.consumer kafka
+        { groupId }
+    Effect.Aff.bracket (Kafka.Consumer.connect consumer) (\_ -> Kafka.Consumer.disconnect consumer) \_ -> do
+      Kafka.Consumer.subscribe consumer
+        { fromBeginning: Data.Maybe.Just true
+        , topics: [ Kafka.Consumer.TopicName topic ]
+        }
+      fiberRun <- Effect.Aff.forkAff $ Kafka.Consumer.run consumer
+        { autoCommit: Data.Maybe.Nothing
+        , consume: Kafka.Consumer.EachBatch
+            { autoResolve: Data.Maybe.Just true
+            , handler: \eachBatchPayload -> do
+                isStale <- Effect.Class.liftEffect eachBatchPayload.isStale
+                when (not isStale) do
+                  (newMessages :: Array { key :: String, partition :: Int, value :: String }) <-
+                    map Data.Array.catMaybes
+                      $ Data.Traversable.for eachBatchPayload.batch.messages \message -> do
+                          let
+                            maybeKeyValue :: Data.Maybe.Maybe { key :: Node.Buffer.Buffer, value :: Node.Buffer.Buffer }
+                            maybeKeyValue = do
+                              key <- message.key
+                              value <- message.value
+                              pure { key, value }
+                          Data.Traversable.for maybeKeyValue \keyValue -> do
+                            key <- Effect.Class.liftEffect $
+                              Node.Buffer.toString Node.Encoding.UTF8 keyValue.key
+                            value <- Effect.Class.liftEffect $
+                              Node.Buffer.toString Node.Encoding.UTF8 keyValue.value
+                            pure { key, partition: eachBatchPayload.batch.partition, value }
+                  Effect.Class.liftEffect $
+                    Effect.Ref.modify_ (_ <> newMessages) receivedRef
+            }
+        , partitionsConsumedConcurrently: Data.Maybe.Nothing
+        }
+      Effect.Class.liftEffect $
+        Data.Foldable.for_ topicPartitionOffsets \topicPartitionOffset ->
+          Kafka.Consumer.seek consumer topicPartitionOffset
+      waitForConsumerToJoinGroup consumer
+      Effect.Aff.joinFiber fiberRun
+      waitForMessages 3 $ Effect.Class.liftEffect do
+        received <- Effect.Ref.read receivedRef
+        pure $ Data.Array.length received
+    received <- Effect.Class.liftEffect $
+      Effect.Ref.read receivedRef
+    Test.Unit.Assert.equal
+      [ { key: "key-3", partition: 0, value: "value-C" }
+      , { key: "key-5", partition: 0, value: "value-E" }
+      ]
+      (Data.Array.filter (\x -> x.partition == 0) received)
+    Test.Unit.Assert.equal
+      [ { key: "key-6", partition: 1, value: "value-F" }
+      ]
+      (Data.Array.filter (\x -> x.partition == 1) received)
 
 testProduceConsumeRoundtrip :: Test.Unit.TestSuite
 testProduceConsumeRoundtrip = do
