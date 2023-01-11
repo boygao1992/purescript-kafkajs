@@ -16,6 +16,7 @@ import Effect.Class as Effect.Class
 import Effect.Class.Console as Effect.Class.Console
 import Effect.Exception as Effect.Exception
 import Effect.Ref as Effect.Ref
+import Effect.Timer as Effect.Timer
 import Kafka.Admin as Kafka.Admin
 import Kafka.Consumer as Kafka.Consumer
 import Kafka.Kafka as Kafka.Kafka
@@ -81,7 +82,7 @@ main :: Effect Unit
 main = Effect.Aff.runAff_ reraiseException do
   Effect.Aff.bracket acquire release \_ -> do
     Effect.Class.liftEffect waitForKafka
-    runTest testSuite
+    runTest suiteMain
   where
   acquire :: Effect.Aff.Aff Unit
   acquire = Effect.Class.liftEffect do
@@ -96,6 +97,25 @@ main = Effect.Aff.runAff_ reraiseException do
   release :: Unit -> Effect.Aff.Aff Unit
   release _ = Effect.Class.liftEffect do
     dockerComposeDown
+
+newKafka :: Effect.Aff.Aff Kafka.Kafka.Kafka
+newKafka = do
+  Effect.Class.liftEffect $
+    Kafka.Kafka.newKafka
+      { brokers: Kafka.Kafka.KafkaConfigBrokersPure brokers
+      , clientId: Data.Maybe.Just clientId
+      , logLevel: Data.Maybe.Just Kafka.Kafka.LogLevelNothing
+      }
+  where
+  brokers :: Array String
+  brokers =
+    [ "localhost:9092"
+    , "localhost:9095"
+    , "localhost:9098"
+    ]
+
+  clientId :: String
+  clientId = "Test.Main"
 
 retry ::
   forall a e m.
@@ -124,7 +144,7 @@ retry limit betweenRetries effect = Control.Monad.Rec.Class.tailRecM go 1
             pure $ Control.Monad.Rec.Class.Done a
 
 -- | NOTE `Test.Unit.Main.runTest` could bypass the cleanup step in
--- |  `Effect.Aff.bracket` by early termination of the process with 
+-- |  `Effect.Aff.bracket` by early termination of the process with
 -- | `Test.Unit.Main.exit 1` when there are failed tests.
 -- | See https://github.com/bodil/purescript-test-unit/blob/b0229a121537de9e47a0b0705005dd7b81c2c160/src/Test/Unit/Main.purs#L38
 -- |
@@ -149,22 +169,16 @@ sleep seconds = do
   cmd :: String
   cmd = "sleep " <> Data.Int.toStringAs Data.Int.decimal seconds
 
-testSuite :: Test.Unit.TestSuite
-testSuite = do
-  Test.Unit.test "produce and receive messages from beginning" do
+suiteMain :: Test.Unit.TestSuite
+suiteMain = do
+  testProduceConsumeRoundtrip
+
+testProduceConsumeRoundtrip :: Test.Unit.TestSuite
+testProduceConsumeRoundtrip = do
+  Test.Unit.test "produce-consume roundtrip" do
     let
-      brokers :: Array String
-      brokers =
-        [ "localhost:9092"
-        , "localhost:9095"
-        , "localhost:9098"
-        ]
-
-      clientId :: String
-      clientId = "Test.Main"
-
       groupId :: String
-      groupId = "test-group"
+      groupId = "testProduceConsumeRoundtrip-groupId"
 
       messages :: Array { key :: String, value :: String }
       messages =
@@ -174,14 +188,9 @@ testSuite = do
         ]
 
       topic :: String
-      topic = "test-topic"
+      topic = "testProduceConsumeRoundtrip-topic"
 
-    kafka <- Effect.Class.liftEffect $
-      Kafka.Kafka.newKafka
-        { brokers: Kafka.Kafka.KafkaConfigBrokersPure brokers
-        , clientId: Data.Maybe.Just clientId
-        , logLevel: Data.Maybe.Just Kafka.Kafka.LogLevelNothing
-        }
+    kafka <- newKafka
     admin <- Effect.Class.liftEffect $
       Kafka.Admin.admin kafka {}
     Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
@@ -230,7 +239,7 @@ testSuite = do
         { fromBeginning: Data.Maybe.Just true
         , topics: [ Kafka.Consumer.TopicName topic ]
         }
-      Kafka.Consumer.run consumer
+      fiberRun <- Effect.Aff.forkAff $ Kafka.Consumer.run consumer
         { autoCommit: Data.Maybe.Nothing
         , consume: Kafka.Consumer.EachBatch
             { autoResolve: Data.Maybe.Just true
@@ -255,10 +264,45 @@ testSuite = do
             }
         , partitionsConsumedConcurrently: Data.Maybe.Nothing
         }
-      Effect.Aff.delay (Effect.Aff.Milliseconds 1000.0)
+      waitForConsumerToJoinGroup consumer
+      Effect.Aff.joinFiber fiberRun
+      waitForMessages (Data.Array.length messages) $ Effect.Class.liftEffect do
+        received <- Effect.Ref.read receivedRef
+        pure $ Data.Array.length received
     received <- Effect.Class.liftEffect $
       Effect.Ref.read receivedRef
     Test.Unit.Assert.equal messages received
+
+waitForConsumerToJoinGroup :: Kafka.Consumer.Consumer -> Effect.Aff.Aff Unit
+waitForConsumerToJoinGroup consumer = do
+  Effect.Aff.makeAff \callback -> do
+    timeoutId <- Effect.Timer.setTimeout 10000 do
+      callback $ Data.Either.Left
+        $ Effect.Aff.error "waitForConsumerToJoinGroup timeout"
+    onCrash <- Kafka.Consumer.onCrash consumer \event -> do
+      Effect.Timer.clearTimeout timeoutId
+      callback $ Data.Either.Left event.error
+    onGroupJoin <- Kafka.Consumer.onGroupJoin consumer \_ -> do
+      Effect.Timer.clearTimeout timeoutId
+      callback $ Data.Either.Right unit
+    pure $ Effect.Aff.Canceler \_ -> Effect.Class.liftEffect do
+      Effect.Timer.clearTimeout timeoutId
+      onCrash.removeListener
+      onGroupJoin.removeListener
+
+waitForMessages ::
+  Int ->
+  Effect.Aff.Aff Int ->
+  Effect.Aff.Aff Unit
+waitForMessages messageCount getReceivedCount = do
+  retry retryLimit (Effect.Aff.delay (Effect.Aff.Milliseconds 1000.0)) do
+    receivedCount <- getReceivedCount
+    when (receivedCount < messageCount) do
+      Effect.Aff.throwError
+        $ Effect.Aff.error "didn't receive the expected number of messages"
+  where
+  retryLimit :: Int
+  retryLimit = 5
 
 waitForKafka :: Effect Unit
 waitForKafka = do
@@ -283,4 +327,3 @@ waitForKafkaInstance containerName = do
   where
   retryLimit :: Int
   retryLimit = 30
-
