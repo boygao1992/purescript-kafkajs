@@ -16,6 +16,7 @@ module Kafka.Consumer
   , connect
   , consumer
   , disconnect
+  , onCrash
   , onGroupJoin
   , run
   , seek
@@ -141,6 +142,33 @@ type ConsumerConfig =
 -- | * `sessionTimeout?: number`
 type ConsumerConfigImpl =
   { groupId :: String }
+
+type ConsumerCrashEvent =
+  { error :: Effect.Aff.Error
+  , groupId :: String
+  , restart :: Boolean
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L960
+-- |
+-- | `type ConsumerCrashEvent = InstrumentationEvent<{...}>`
+-- |  * `error: Error`
+-- |  * `groupId: string`
+-- |  * `restart: boolean`
+type ConsumerCrashEventImpl =
+  InstrumentationEventImpl
+    { error :: Effect.Aff.Error
+    , groupId :: String
+    , restart :: Boolean
+    }
+
+type ConsumerCrashEventListener =
+  ConsumerCrashEvent -> Effect.Effect Unit
+
+type ConsumerCrashEventListenerImpl =
+  Effect.Uncurried.EffectFn1
+    ConsumerCrashEventImpl
+    Unit
 
 -- | * `duration`
 -- |   * time lapsed since requested to join the Consumer Group
@@ -616,6 +644,42 @@ disconnect :: Consumer -> Effect.Aff.Aff Unit
 disconnect consumer' =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn1 _disconnect consumer'
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1084-L1087
+-- |
+-- | ```
+-- | on(
+-- |   eventName: ConsumerEvents['CRASH'],
+-- |   listener: (event: ConsumerCrashEvent) => void
+-- | ): RemoveInstrumentationEventListener<typeof eventName>
+-- | ```
+foreign import _onCrash ::
+  Effect.Uncurried.EffectFn2
+    Consumer
+    ConsumerCrashEventListenerImpl
+    RemoveInstrumentationEventListener
+
+onCrash ::
+  Consumer ->
+  ConsumerCrashEventListener ->
+  Effect.Effect { removeListener :: Effect.Effect Unit }
+onCrash consumer' consumerCrashEventListener = do
+  removeListener <- Effect.Uncurried.runEffectFn2 _onCrash consumer'
+    $ toConsumerCrashEventListenerImpl consumerCrashEventListener
+  pure { removeListener }
+  where
+  fromConsumerGropuJoinEventImpl ::
+    ConsumerCrashEventImpl ->
+    ConsumerCrashEvent
+  fromConsumerGropuJoinEventImpl x = x.payload
+
+  toConsumerCrashEventListenerImpl ::
+    ConsumerCrashEventListener ->
+    ConsumerCrashEventListenerImpl
+  toConsumerCrashEventListenerImpl listener =
+    Effect.Uncurried.mkEffectFn1 \eventImpl ->
+      listener
+        $ fromConsumerGropuJoinEventImpl eventImpl
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1052-L1055
 -- |
