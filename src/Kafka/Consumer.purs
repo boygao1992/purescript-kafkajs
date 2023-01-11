@@ -12,10 +12,14 @@ module Kafka.Consumer
   , PartitionOffset
   , Topic(..)
   , TopicOffsets
+  , TopicPartitionOffset
   , connect
   , consumer
   , disconnect
+  , onCrash
+  , onGroupJoin
   , run
+  , seek
   , subscribe
   ) where
 
@@ -25,6 +29,7 @@ import Control.Promise as Control.Promise
 import Data.Maybe as Data.Maybe
 import Data.Nullable as Data.Nullable
 import Data.String.Regex as Data.String.Regex
+import Data.Time.Duration as Data.Time.Duration
 import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
@@ -137,6 +142,102 @@ type ConsumerConfig =
 -- | * `sessionTimeout?: number`
 type ConsumerConfigImpl =
   { groupId :: String }
+
+type ConsumerCrashEvent =
+  { error :: Effect.Aff.Error
+  , groupId :: String
+  , restart :: Boolean
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L960
+-- |
+-- | `type ConsumerCrashEvent = InstrumentationEvent<{...}>`
+-- |  * `error: Error`
+-- |  * `groupId: string`
+-- |  * `restart: boolean`
+type ConsumerCrashEventImpl =
+  InstrumentationEventImpl
+    { error :: Effect.Aff.Error
+    , groupId :: String
+    , restart :: Boolean
+    }
+
+type ConsumerCrashEventListener =
+  ConsumerCrashEvent -> Effect.Effect Unit
+
+type ConsumerCrashEventListenerImpl =
+  Effect.Uncurried.EffectFn1
+    ConsumerCrashEventImpl
+    Unit
+
+-- | * `duration`
+-- |   * time lapsed since requested to join the Consumer Group
+-- | * `groupId`
+-- |   * Consumer Group ID which should match the one specified in the `ConsumerConfig`
+-- | * `groupProtocol`
+-- |   * Partition Assigner protocol name e.g. "RoundRobinAssigner"
+-- | * `isLeader`
+-- |   * is the Consumer Group Leader which is responsible for executing rebalance activity. Consumer Group Leader will take a list of current members, assign partitions to them and send it back to the coordinator. The Coordinator then communicates back to the members about their new partitions.
+-- | * `leaderId`
+-- |   * Member ID of the Consumer Group Leader
+-- | * `memberAssignment`
+-- |   * topic-partitions assigned to this Consumer
+-- | * `memberId`
+-- |   * Member ID of this Consumer in the Consumer Group
+type ConsumerGroupJoinEvent =
+  { duration :: Data.Time.Duration.Milliseconds
+  , groupId :: String
+  , groupProtocol :: String
+  , isLeader :: Boolean
+  , leaderId :: String
+  , memberAssignment :: ConsumerGroupJoinEventMemberAssignment
+  , memberId :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L931
+-- |
+-- | `type ConsumerGroupJoinEvent = InstrumentationEvent<{...}>`
+-- | * `duration: number`
+-- | * `groupId: string`
+-- | * `groupProtocol: string`
+-- | * `isLeader: boolean`
+-- | * `leaderId: string`
+-- | * `memberAssignment: IMemberAssignment`
+-- | * `memberId: string`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/1ab72f2c3925685b730937dd34481a4faa0ddb03/src/consumer/consumerGroup.js#L338-L353
+type ConsumerGroupJoinEventImpl =
+  InstrumentationEventImpl
+    { duration :: Number
+    , groupId :: String
+    , groupProtocol :: String
+    , isLeader :: Boolean
+    , leaderId :: String
+    , memberAssignment :: ConsumerGroupJoinEventMemberAssignment
+    , memberId :: String
+    }
+
+type ConsumerGroupJoinEventListener =
+  ConsumerGroupJoinEvent -> Effect.Effect Unit
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1054
+-- |
+-- | `(event: ConsumerGroupJoinEvent) => void`
+type ConsumerGroupJoinEventListenerImpl =
+  Effect.Uncurried.EffectFn1
+    ConsumerGroupJoinEventImpl
+    Unit
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L928
+-- |
+-- | ```
+-- | export interface IMemberAssignment {
+-- |   [key: string]: number[]
+-- | }
+-- | ```
+type ConsumerGroupJoinEventMemberAssignment =
+  Foreign.Object.Object
+    (Array Int)
 
 -- | * `autoCommit`
 -- |   * auto commit offsets periodically during a batch
@@ -341,6 +442,21 @@ type EachMessagePayloadImpl =
   , topic :: String
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L382
+-- |
+-- | `interface InstrumentationEvent<T>`
+-- | * `id: string`
+-- |   * globally incremental ID, see https://github.com/tulios/kafkajs/blob/4246f921f4d66a95f32f159c890d0a3a83803713/src/instrumentation/event.js#L16
+-- | * `payload: T`
+-- | * `timestamp: number`
+-- | * `type: string`
+type InstrumentationEventImpl payload =
+  { id :: String
+  , payload :: payload
+  , timestamp :: Number
+  , type :: String
+  }
+
 -- | * `headers`
 -- | * `key`
 -- | * `offset`
@@ -454,6 +570,10 @@ type PartitionOffset =
   , partition :: Int
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L389
+-- | `type RemoveInstrumentationEventListener<T> = () => void`
+type RemoveInstrumentationEventListener = Effect.Effect Unit
+
 data Topic
   = TopicName String
   | TopicRegex Data.String.Regex.Regex
@@ -464,6 +584,21 @@ data Topic
 -- | * `topic: string`
 type TopicOffsets =
   { partitions :: Array PartitionOffset
+  , topic :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L869
+-- | 
+-- | `TopicPartition & { offset: string }`
+-- |
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L865
+-- | 
+-- | `TopicPartition`
+-- | * `topic: string`
+-- | * `partition: number`
+type TopicPartitionOffset =
+  { offset :: String
+  , partition :: Int
   , topic :: String
   }
 
@@ -509,6 +644,86 @@ disconnect :: Consumer -> Effect.Aff.Aff Unit
 disconnect consumer' =
   Control.Promise.toAffE
     $ Effect.Uncurried.runEffectFn1 _disconnect consumer'
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1084-L1087
+-- |
+-- | ```
+-- | on(
+-- |   eventName: ConsumerEvents['CRASH'],
+-- |   listener: (event: ConsumerCrashEvent) => void
+-- | ): RemoveInstrumentationEventListener<typeof eventName>
+-- | ```
+foreign import _onCrash ::
+  Effect.Uncurried.EffectFn2
+    Consumer
+    ConsumerCrashEventListenerImpl
+    RemoveInstrumentationEventListener
+
+onCrash ::
+  Consumer ->
+  ConsumerCrashEventListener ->
+  Effect.Effect { removeListener :: Effect.Effect Unit }
+onCrash consumer' consumerCrashEventListener = do
+  removeListener <- Effect.Uncurried.runEffectFn2 _onCrash consumer'
+    $ toConsumerCrashEventListenerImpl consumerCrashEventListener
+  pure { removeListener }
+  where
+  fromConsumerGropuJoinEventImpl ::
+    ConsumerCrashEventImpl ->
+    ConsumerCrashEvent
+  fromConsumerGropuJoinEventImpl x = x.payload
+
+  toConsumerCrashEventListenerImpl ::
+    ConsumerCrashEventListener ->
+    ConsumerCrashEventListenerImpl
+  toConsumerCrashEventListenerImpl listener =
+    Effect.Uncurried.mkEffectFn1 \eventImpl ->
+      listener
+        $ fromConsumerGropuJoinEventImpl eventImpl
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1052-L1055
+-- |
+-- | ```
+-- | on(
+-- |   eventName: ConsumerEvents['GROUP_JOIN'],
+-- |   listener: (event: ConsumerGroupJoinEvent) => void
+-- | ): RemoveInstrumentationEventListener<typeof eventName>
+-- | ```
+foreign import _onGroupJoin ::
+  Effect.Uncurried.EffectFn2
+    Consumer
+    ConsumerGroupJoinEventListenerImpl
+    RemoveInstrumentationEventListener
+
+onGroupJoin ::
+  Consumer ->
+  ConsumerGroupJoinEventListener ->
+  Effect.Effect { removeListener :: Effect.Effect Unit }
+onGroupJoin consumer' consumerGroupJoinEventListener = do
+  removeListener <- Effect.Uncurried.runEffectFn2 _onGroupJoin consumer'
+    $ toConsumerGroupJoinEventListenerImpl consumerGroupJoinEventListener
+  pure { removeListener }
+  where
+  fromConsumerGropuJoinEventImpl ::
+    ConsumerGroupJoinEventImpl ->
+    ConsumerGroupJoinEvent
+  fromConsumerGropuJoinEventImpl x =
+    { duration: Data.Time.Duration.Milliseconds x.payload.duration
+    , groupId: x.payload.groupId
+    , groupProtocol: x.payload.groupProtocol
+    , isLeader: x.payload.isLeader
+    , leaderId: x.payload.leaderId
+    , memberAssignment: x.payload.memberAssignment
+    , memberId: x.payload.memberId
+    }
+
+  toConsumerGroupJoinEventListenerImpl ::
+    ConsumerGroupJoinEventListener ->
+    ConsumerGroupJoinEventListenerImpl
+  toConsumerGroupJoinEventListenerImpl listener =
+    Effect.Uncurried.mkEffectFn1 \eventImpl ->
+      listener
+        $ fromConsumerGropuJoinEventImpl eventImpl
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1037
 -- |
@@ -619,6 +834,19 @@ run consumer' consumerRunConfig =
       Control.Promise.fromAff
         $ eachMessageHandler
         $ fromEachMessagePayloadImpl eachMessagePayloadImpl
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1039
+-- |
+-- | `seek(topicPartitionOffset: TopicPartitionOffset): void`
+foreign import _seek ::
+  Effect.Uncurried.EffectFn2
+    Consumer
+    TopicPartitionOffset
+    Unit
+
+seek :: Consumer -> TopicPartitionOffset -> Effect.Effect Unit
+seek consumer' topicPartitionOffset =
+  Effect.Uncurried.runEffectFn2 _seek consumer' topicPartitionOffset
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1035
 -- |
