@@ -2,7 +2,6 @@ module Kafka.Producer
   ( Acks(..)
   , CompressionType(..)
   , Message
-  , Producer
   , ProducerBatch
   , ProducerConfig
   , ProducerRecord
@@ -28,7 +27,8 @@ import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
 import Kafka.FFI as Kafka.FFI
-import Kafka.Kafka as Kafka.Kafka
+import Kafka.FFI.Kafka as Kafka.FFI.Kafka
+import Kafka.FFI.Producer as Kafka.FFI.Producer
 import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
@@ -48,8 +48,6 @@ data Acks
 
 derive instance eqAcks :: Eq Acks
 derive instance ordAcks :: Ord Acks
-
-type AcksImpl = Int
 
 -- | See [Compression](https://kafka.js.org/docs/producing#a-name-compression-a-compression)
 -- |
@@ -73,13 +71,6 @@ data CompressionType
 derive instance eqCompressionType :: Eq CompressionType
 derive instance ordCompressionType :: Ord CompressionType
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1116
--- | `CompressionTypes`
--- |
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
--- | `Compression.Types`
-type CompressionTypeImpl = Int
-
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
 -- |
 -- | * `headers`
@@ -101,32 +92,6 @@ type Message =
   , value :: Data.Maybe.Maybe Value
   }
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L109
--- |
--- | Required
--- | * `value: Buffer | string | null`
--- |
--- | Optional
--- | * `headers?: IHeaders`
--- | * `key?: Buffer | string | null`
--- | * `partition?: number`
--- | * `timestamp?: string`
--- |   * NOTE the expected type is actually `number`
--- |     see [protocol.requests.produce.v7.request test](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/requests/produce/v7/request.spec.js#L25)
--- |     see also [protocol.requests.produce.v3.request implementation](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/requests/produce/v3/request.js#L99) which hasn't changed since `v3`
-type MessageImpl =
-  Kafka.FFI.Object
-    ( value :: Data.Nullable.Nullable ValueImpl
-    )
-    ( headers :: Kafka.Type.MessageHeadersImpl
-    , key :: ValueImpl
-    , partition :: Int
-    , timestamp :: Number
-    )
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787
-foreign import data Producer :: Type
-
 -- | * `acks`
 -- |   * Control the number of required acks.
 -- |   * default: `AcksAll`
@@ -144,22 +109,6 @@ type ProducerBatch =
   , timeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , topicMessages :: Array TopicMessages
   }
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L753
--- |
--- | Optional
--- | * `acks?: number`
--- | * `compression?: CompressionTypes`
--- | * `timeout?: number`
--- | * `topicMessages?: TopicMessages[]`
-type ProducerBatchImpl =
-  Kafka.FFI.Object
-    ()
-    ( acks :: AcksImpl
-    , compression :: CompressionTypeImpl
-    , timeout :: Number
-    , topicMessages :: Array TopicMessagesImpl
-    )
 
 -- | see [Options](https://kafka.js.org/docs/producing#options)
 -- |
@@ -189,30 +138,6 @@ type ProducerConfig =
   , transactionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , transactionalId :: Data.Maybe.Maybe String
   }
-
--- | https://github.com/tulios/kafkajs/blob/v2.2.3/types/index.d.ts#L98
--- |
--- | Optional
--- | * `allowAutoTopicCreation?: boolean`
--- | * `idempotent?: boolean`
--- | * `maxInFlightRequests?: number`
--- | * `metadataMaxAge?: number`
--- | * `transactionTimeout?: number`
--- | * `transactionalId?: string`
--- |
--- | Unsupported
--- | * `createPartitioner?: ICustomPartitioner`
--- | * `retry?: RetryOptions`
-type ProducerConfigImpl =
-  Kafka.FFI.Object
-    ()
-    ( allowAutoTopicCreation :: Boolean
-    , idempotent :: Boolean
-    , maxInFlightRequests :: Int
-    , metadataMaxAge :: Number
-    , transactionTimeout :: Number
-    , transactionalId :: String
-    )
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L729
 -- |
@@ -258,47 +183,8 @@ type RecordMetadata =
   , topicName :: String
   }
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L737
--- |
--- | Required
--- | * `errorCode: number`
--- |   * NOTE `RecordMetadataImpl` is success response so likely `errorCode` is always `0` otherwise we should expect an exception raised from `Promise`
--- |     * see [protocol.requests.produce.v3.response](https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/requests/produce/v3/response.js#L45)
--- | * `partition: number`
--- | * `topicName: string`
--- |
--- | Optional
--- | * `baseOffset?: string`
--- | * `logAppendTime?: string`
--- | * `logStartOffset?: string`
--- |
--- | Unsupported
--- | * `offset?: string`
--- |   * NOTE doesn't exist in Kafka protocol schema. See https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/requests/produce/v7/response.js#L3-L14
--- | * `timestamp?: string`
--- |   * NOTE doesn't exist in Kafka protocol schema. See https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/protocol/requests/produce/v7/response.js#L3-L14
-type RecordMetadataImpl =
-  Kafka.FFI.Object
-    ( errorCode :: Int
-    , partition :: Int
-    , topicName :: String
-    )
-    ( baseOffset :: String
-    , logAppendTime :: String
-    , logStartOffset :: String
-    )
-
 type TopicMessages =
   { messages :: Array Message
-  , topic :: String
-  }
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L748
--- |
--- | * `messages: Message[]`
--- | * `topic: string`
-type TopicMessagesImpl =
-  { messages :: Array MessageImpl
   , topic :: String
   }
 
@@ -306,51 +192,22 @@ data Value
   = Buffer Node.Buffer.Buffer
   | String String
 
-type ValueImpl =
-  Node.Buffer.Buffer
-    Untagged.Union.|+| String
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L788
--- |
--- | `connect(): Promise<void>`
-foreign import _connect ::
-  Effect.Uncurried.EffectFn1
-    Producer
-    (Control.Promise.Promise Unit)
-
-connect :: Producer -> Effect.Aff.Aff Unit
+connect :: Kafka.FFI.Producer.Producer -> Effect.Aff.Aff Unit
 connect producer' =
   Control.Promise.toAffE
-    $ Effect.Uncurried.runEffectFn1 _connect producer'
+    $ Effect.Uncurried.runEffectFn1 Kafka.FFI.Producer._connect producer'
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L789
--- |
--- | `disconnect(): Promise<void>`
-foreign import _disconnect ::
-  Effect.Uncurried.EffectFn1
-    Producer
-    (Control.Promise.Promise Unit)
-
-disconnect :: Producer -> Effect.Aff.Aff Unit
+disconnect :: Kafka.FFI.Producer.Producer -> Effect.Aff.Aff Unit
 disconnect producer' =
   Control.Promise.toAffE
-    $ Effect.Uncurried.runEffectFn1 _disconnect producer'
+    $ Effect.Uncurried.runEffectFn1 Kafka.FFI.Producer._disconnect producer'
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L11
--- |
--- | `producer(config?: ProducerConfig): Producer`
-foreign import _producer ::
-  Effect.Uncurried.EffectFn2
-    Kafka.Kafka.Kafka
-    ProducerConfigImpl
-    Producer
-
-producer :: Kafka.Kafka.Kafka -> ProducerConfig -> Effect.Effect Producer
+producer :: Kafka.FFI.Kafka.Kafka -> ProducerConfig -> Effect.Effect Kafka.FFI.Producer.Producer
 producer kafka config =
-  Effect.Uncurried.runEffectFn2 _producer kafka
+  Effect.Uncurried.runEffectFn2 Kafka.FFI.Producer._producer kafka
     $ toProducerConfigImpl config
   where
-  toProducerConfigImpl :: ProducerConfig -> ProducerConfigImpl
+  toProducerConfigImpl :: ProducerConfig -> Kafka.FFI.Producer.ProducerConfigImpl
   toProducerConfigImpl x = Kafka.FFI.objectFromRecord
     { allowAutoTopicCreation: x.allowAutoTopicCreation
     , idempotent: x.idempotent
@@ -365,7 +222,7 @@ producer kafka config =
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/producer/messageProducer.js#L118
 -- |
 -- | NOTE logic is very simple so instead of FFI we rewrite in PS
-send :: Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
+send :: Kafka.FFI.Producer.Producer -> ProducerRecord -> Effect.Aff.Aff (Array RecordMetadata)
 send producer' x = sendBatch producer'
   { acks: x.acks
   , compression: x.compression
@@ -379,23 +236,14 @@ send producer' x = sendBatch producer'
     , topic: x.topic
     }
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L776
--- |
--- | `sendBatch(batch: ProducerBatch): Promise<RecordMetadata[]>`
-foreign import _sendBatch ::
-  Effect.Uncurried.EffectFn2
-    Producer
-    ProducerBatchImpl
-    (Control.Promise.Promise (Array RecordMetadataImpl))
-
-sendBatch :: Producer -> ProducerBatch -> Effect.Aff.Aff (Array RecordMetadata)
+sendBatch :: Kafka.FFI.Producer.Producer -> ProducerBatch -> Effect.Aff.Aff (Array RecordMetadata)
 sendBatch producer' producerBatch = do
   recordMetadataImpls <- Control.Promise.toAffE do
-    Effect.Uncurried.runEffectFn2 _sendBatch producer'
+    Effect.Uncurried.runEffectFn2 Kafka.FFI.Producer._sendBatch producer'
       $ toProducerBatchImpl producerBatch
   pure $ fromRecordMetadataImpl <$> recordMetadataImpls
   where
-  fromRecordMetadataImpl :: RecordMetadataImpl -> RecordMetadata
+  fromRecordMetadataImpl :: Kafka.FFI.Producer.RecordMetadataImpl -> RecordMetadata
   fromRecordMetadataImpl = Kafka.FFI.objectToRecord
 
   -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/src/producer/messageProducer.js#L43-L46
@@ -403,7 +251,7 @@ sendBatch producer' producerBatch = do
   -- | -1 = all replicas must acknowledge
   -- |  0 = no acknowledgments
   -- |  1 = only waits for the leader to acknowledge
-  toAcksImpl :: Acks -> AcksImpl
+  toAcksImpl :: Acks -> Kafka.FFI.Producer.AcksImpl
   toAcksImpl = case _ of
     AcksAll -> -1
     AcksNo -> 0
@@ -416,7 +264,7 @@ sendBatch producer' producerBatch = do
   -- | Snappy = 2
   -- | LZ4 = 3
   -- | ZSTD = 4
-  toCompressionTypeImpl :: CompressionType -> CompressionTypeImpl
+  toCompressionTypeImpl :: CompressionType -> Kafka.FFI.Producer.CompressionTypeImpl
   toCompressionTypeImpl = case _ of
     CompressionTypeNone -> 0
     CompressionTypeGzip -> 1
@@ -424,7 +272,7 @@ sendBatch producer' producerBatch = do
     CompressionTypeLz4 -> 3
     CompressionTypeZstd -> 4
 
-  toMessageImpl :: Message -> MessageImpl
+  toMessageImpl :: Message -> Kafka.FFI.Producer.MessageImpl
   toMessageImpl x = Kafka.FFI.objectFromRecord
     { headers: x.headers
     , key: toValueImpl <$> x.key
@@ -435,7 +283,7 @@ sendBatch producer' producerBatch = do
     , value: Data.Nullable.toNullable $ map toValueImpl $ x.value
     }
 
-  toProducerBatchImpl :: ProducerBatch -> ProducerBatchImpl
+  toProducerBatchImpl :: ProducerBatch -> Kafka.FFI.Producer.ProducerBatchImpl
   toProducerBatchImpl x = Kafka.FFI.objectFromRecord
     { acks: toAcksImpl <$> x.acks
     , compression: toCompressionTypeImpl <$> x.compression
@@ -444,13 +292,13 @@ sendBatch producer' producerBatch = do
     , topicMessages: toTopicMessagesImpl <$> x.topicMessages
     }
 
-  toTopicMessagesImpl :: TopicMessages -> TopicMessagesImpl
+  toTopicMessagesImpl :: TopicMessages -> Kafka.FFI.Producer.TopicMessagesImpl
   toTopicMessagesImpl x =
     { messages: toMessageImpl <$> x.messages
     , topic: x.topic
     }
 
-  toValueImpl :: Value -> ValueImpl
+  toValueImpl :: Value -> Kafka.FFI.Producer.ValueImpl
   toValueImpl value = case value of
     Buffer buffer -> Untagged.Union.asOneOf buffer
     String string -> Untagged.Union.asOneOf string
