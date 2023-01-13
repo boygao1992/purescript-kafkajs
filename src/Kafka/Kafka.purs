@@ -1,8 +1,7 @@
 module Kafka.Kafka
-  ( LogLevel(..)
-  , Kafka
-  , KafkaConfig
+  ( KafkaConfig
   , KafkaConfigBrokers(..)
+  , LogLevel(..)
   , newKafka
   ) where
 
@@ -14,17 +13,8 @@ import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
 import Kafka.FFI as Kafka.FFI
+import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Untagged.Union as Untagged.Union
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L17
--- |
--- | * `BrokersFunction = () => string[] | Promise<string[]>`
-type BrokerFunctionImpl =
-  Effect.Effect (Array String)
-    Untagged.Union.|+| Effect.Effect (Control.Promise.Promise (Array String))
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L9
-foreign import data Kafka :: Type
 
 -- | * `brokers`
 -- |   * A list of seed broker URLs to fetch metadata of the whole broker cluster
@@ -42,46 +32,10 @@ type KafkaConfig =
   , logLevel :: Data.Maybe.Maybe LogLevel
   }
 
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L50
--- |
--- | Required
--- | * `brokers: string[] | BrokersFunction`
--- |
--- | Optional
--- | * `clientId?: string`
--- | * `logLevel?: logLevel`
--- |
--- | Unsupported
--- | * `ssl?: tls.ConnectionOptions | boolean`
--- | * `sasl?: SASLOptions`
--- | * `clientId?: string`
--- | * `connectionTimeout?: number`
--- | * `authenticationTimeout?: number`
--- | * `reauthenticationThreshold?: number`
--- | * `requestTimeout?: number`
--- | * `enforceRequestTimeout?: boolean`
--- | * `retry?: RetryOptions`
--- | * `socketFactory?: ISocketFactory`
--- | * `logCreator?: logCreator`
-type KafkaConfigImpl =
-  Kafka.FFI.Object
-    ( brokers :: KafkaConfigBrokersImpl
-    )
-    ( clientId :: String
-    , logLevel :: LogLevelImpl
-    )
-
 data KafkaConfigBrokers
   = KafkaConfigBrokersAsync (Effect.Aff.Aff (Array String))
   | KafkaConfigBrokersPure (Array String)
   | KafkaConfigBrokersSync (Effect.Effect (Array String))
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L51
--- |
--- | `brokers: string[] | BrokersFunction`
-type KafkaConfigBrokersImpl =
-  Array String
-    Untagged.Union.|+| BrokerFunctionImpl
 
 data LogLevel
   = LogLevelNothing
@@ -90,20 +44,9 @@ data LogLevel
   | LogLevelInfo
   | LogLevelDebug
 
--- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L513
-type LogLevelImpl = Int
-
--- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L10
--- |
--- | `constructor(config: KafkaConfig)`
-foreign import _newKafka ::
-  Effect.Uncurried.EffectFn1
-    KafkaConfigImpl
-    Kafka
-
-newKafka :: KafkaConfig -> Effect.Effect Kafka
+newKafka :: KafkaConfig -> Effect.Effect Kafka.FFI.Kafka.Kafka
 newKafka config =
-  Effect.Uncurried.runEffectFn1 _newKafka
+  Effect.Uncurried.runEffectFn1 Kafka.FFI.Kafka._newKafka
     $ toKafkaConfigImpl
     $ config
   where
@@ -118,7 +61,7 @@ newKafka config =
   -- |   DEBUG = 5,
   -- | }
   -- | ```
-  toLogLevelImpl :: LogLevel -> LogLevelImpl
+  toLogLevelImpl :: LogLevel -> Kafka.FFI.Kafka.LogLevelImpl
   toLogLevelImpl = case _ of
     LogLevelNothing -> 0
     LogLevelError -> 1
@@ -126,7 +69,7 @@ newKafka config =
     LogLevelInfo -> 3
     LogLevelDebug -> 4
 
-  toKafkaConfigImpl :: KafkaConfig -> KafkaConfigImpl
+  toKafkaConfigImpl :: KafkaConfig -> Kafka.FFI.Kafka.KafkaConfigImpl
   toKafkaConfigImpl x = Kafka.FFI.objectFromRecord
     { brokers: case x.brokers of
         KafkaConfigBrokersAsync aff -> Untagged.Union.asOneOf $ Control.Promise.fromAff aff
