@@ -208,7 +208,7 @@ testConsumerSeekWithTwoPartitions =
         ]
     kafka <- newKafka
     admin <- Effect.Class.liftEffect $
-      Kafka.Admin.admin kafka {}
+      Kafka.Admin.admin kafka
     Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
       created <- Kafka.Admin.createTopics admin
         { timeout: Data.Maybe.Nothing
@@ -321,7 +321,7 @@ testProduceConsumeRoundtrip = do
 
     kafka <- newKafka
     admin <- Effect.Class.liftEffect $
-      Kafka.Admin.admin kafka {}
+      Kafka.Admin.admin kafka
     Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
       created <- Kafka.Admin.createTopics admin
         { timeout: Data.Maybe.Nothing

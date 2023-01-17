@@ -1,6 +1,5 @@
 module Kafka.Admin
-  ( AdminConfig
-  , CreateTopicsOptions
+  ( CreateTopicsOptions
   , TopicConfig
   , admin
   , connect
@@ -19,10 +18,6 @@ import Kafka.FFI as Kafka.FFI
 import Kafka.FFI.Admin as Kafka.FFI.Admin
 import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 
-type AdminConfig =
-  {
-  }
-
 type CreateTopicsOptions =
   { timeout :: Data.Maybe.Maybe Number
   , topics :: Array TopicConfig
@@ -36,13 +31,9 @@ type TopicConfig =
   , topic :: String
   }
 
-admin :: Kafka.FFI.Kafka.Kafka -> Kafka.FFI.Admin.AdminConfigImpl -> Effect.Effect Kafka.FFI.Admin.Admin
-admin kafka adminConfigImpl =
-  Effect.Uncurried.runEffectFn2 Kafka.FFI.Admin._admin kafka
-    $ toAdminConfigImpl adminConfigImpl
-  where
-  toAdminConfigImpl :: AdminConfig -> Kafka.FFI.Admin.AdminConfigImpl
-  toAdminConfigImpl x = x
+admin :: Kafka.FFI.Kafka.Kafka -> Effect.Effect Kafka.FFI.Admin.Admin
+admin kafka =
+  Effect.Uncurried.runEffectFn2 Kafka.FFI.Admin._admin kafka {}
 
 connect :: Kafka.FFI.Admin.Admin -> Effect.Aff.Aff Unit
 connect admin' =
