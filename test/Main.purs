@@ -19,6 +19,8 @@ import Effect.Ref as Effect.Ref
 import Effect.Timer as Effect.Timer
 import Kafka.Admin as Kafka.Admin
 import Kafka.Consumer as Kafka.Consumer
+import Kafka.FFI.Consumer as Kafka.FFI.Consumer
+import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Kafka.Kafka as Kafka.Kafka
 import Kafka.Producer as Kafka.Producer
 import Node.Buffer as Node.Buffer
@@ -98,7 +100,7 @@ main = Effect.Aff.runAff_ reraiseException do
   release _ = Effect.Class.liftEffect do
     dockerComposeDown
 
-newKafka :: Effect.Aff.Aff Kafka.Kafka.Kafka
+newKafka :: Effect.Aff.Aff Kafka.FFI.Kafka.Kafka
 newKafka = do
   Effect.Class.liftEffect $
     Kafka.Kafka.newKafka
@@ -199,14 +201,14 @@ testConsumerSeekWithTwoPartitions =
       topic :: String
       topic = "testConsumerSeekWithTwoPartitions-topic"
 
-      topicPartitionOffsets :: Array Kafka.Consumer.TopicPartitionOffset
+      topicPartitionOffsets :: Array Kafka.FFI.Consumer.TopicPartitionOffset
       topicPartitionOffsets =
         [ { offset: "1", partition: 0, topic }
         , { offset: "2", partition: 1, topic }
         ]
     kafka <- newKafka
     admin <- Effect.Class.liftEffect $
-      Kafka.Admin.admin kafka {}
+      Kafka.Admin.admin kafka
     Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
       created <- Kafka.Admin.createTopics admin
         { timeout: Data.Maybe.Nothing
@@ -319,7 +321,7 @@ testProduceConsumeRoundtrip = do
 
     kafka <- newKafka
     admin <- Effect.Class.liftEffect $
-      Kafka.Admin.admin kafka {}
+      Kafka.Admin.admin kafka
     Effect.Aff.bracket (Kafka.Admin.connect admin) (\_ -> Kafka.Admin.disconnect admin) \_ -> do
       created <- Kafka.Admin.createTopics admin
         { timeout: Data.Maybe.Nothing
@@ -400,7 +402,7 @@ testProduceConsumeRoundtrip = do
       Effect.Ref.read receivedRef
     Test.Unit.Assert.equal messages received
 
-waitForConsumerToJoinGroup :: Kafka.Consumer.Consumer -> Effect.Aff.Aff Unit
+waitForConsumerToJoinGroup :: Kafka.FFI.Consumer.Consumer -> Effect.Aff.Aff Unit
 waitForConsumerToJoinGroup consumer = do
   Effect.Aff.makeAff \callback -> do
     timeoutId <- Effect.Timer.setTimeout 10000 do
