@@ -249,7 +249,19 @@ testConsumerSeekWithTwoPartitions =
       Effect.Ref.new []
     consumer <- Effect.Class.liftEffect $
       Kafka.Consumer.consumer kafka
-        { groupId }
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , groupId
+        , heartbeatInterval: Data.Maybe.Nothing
+        , maxBytes: Data.Maybe.Nothing
+        , maxBytesPerPartition: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , maxWaitTime: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , minBytes: Data.Maybe.Nothing
+        , readUncommitted: Data.Maybe.Nothing
+        , rebalanceTimeout: Data.Maybe.Nothing
+        , sessionTimeout: Data.Maybe.Nothing
+        }
     Effect.Aff.bracket (Kafka.Consumer.connect consumer) (\_ -> Kafka.Consumer.disconnect consumer) \_ -> do
       Kafka.Consumer.subscribe consumer
         { fromBeginning: Data.Maybe.Just true
@@ -362,7 +374,19 @@ testProduceConsumeRoundtrip = do
       Effect.Ref.new []
     consumer <- Effect.Class.liftEffect $
       Kafka.Consumer.consumer kafka
-        { groupId }
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , groupId
+        , heartbeatInterval: Data.Maybe.Nothing
+        , maxBytes: Data.Maybe.Nothing
+        , maxBytesPerPartition: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , maxWaitTime: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , minBytes: Data.Maybe.Nothing
+        , readUncommitted: Data.Maybe.Nothing
+        , rebalanceTimeout: Data.Maybe.Nothing
+        , sessionTimeout: Data.Maybe.Nothing
+        }
     Effect.Aff.bracket (Kafka.Consumer.connect consumer) (\_ -> Kafka.Consumer.disconnect consumer) \_ -> do
       Kafka.Consumer.subscribe consumer
         { fromBeginning: Data.Maybe.Just true

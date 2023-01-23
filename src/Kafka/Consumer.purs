@@ -87,11 +87,58 @@ data Consume
       }
   | EachMessage EachMessageHandler
 
+-- | See [Options](https://kafka.js.org/docs/consuming#a-name-options-a-options)
+-- |
+-- | * `allowAutoTopicCreation`
+-- |   * Allow topic creation when querying metadata for non-existent topics
+-- |   * default: `true`
 -- | * `groupId`
 -- |   * consumer group ID
 -- |   * Consumer groups allow a group of machines or processes to coordinate access to a list of topics, distributing the load among the consumers. When a consumer fails the load is automatically distributed to other members of the group. Consumer groups __must have__ unique group ids within the cluster, from a kafka broker perspective.
+-- | * `heartbeatInterval`
+-- |   * The expected time in milliseconds between heartbeats to the consumer coordinator. Heartbeats are used to ensure that the consumer's session stays active. The value must be set lower than session timeout
+-- |   * default: `Milliseconds 3000`
+-- | * `maxBytes`
+-- |   * Maximum amount of bytes to accumulate in the response.
+-- |   * default: `10485760` (10MB)
+-- | * `maxBytesPerPartition`
+-- |   * The maximum amount of data per-partition the server will return. This size must be at least as large as the maximum message size the server allows or else it is possible for the producer to send messages larger than the consumer can fetch. If that happens, the consumer can get stuck trying to fetch a large message on a certain partition
+-- |   * default: `1048576` (1MB)
+-- | * `maxInFlightRequests`
+-- |   * Max number of requests that may be in progress at any time. If `Nothing` then no limit.
+-- |   * default: `Nothing` (no limit)
+-- | * `maxWaitTime`
+-- |   * The maximum amount of time in milliseconds the server will block before answering the fetch request if there isn’t sufficient data to immediately satisfy the requirement given by `minBytes`
+-- |   * default: `Milliseconds 5000`
+-- | * `metadataMaxAge`
+-- |   * The period of time in milliseconds after which we force a refresh of metadata even if we haven't seen any partition leadership changes to proactively discover any new brokers or partitions
+-- |   * default: `Milliseconds 300000` (5 minutes)
+-- | * `minBytes`
+-- |   * Minimum amount of data the server should return for a fetch request, otherwise wait up to `maxWaitTime` for more data to accumulate.
+-- |   * default: `1`
+-- | * `readUncommitted`
+-- |   * Configures the consumer isolation level. If `false` (default), the consumer will not return any transactional messages which were not committed.
+-- |   * default: `false`
+-- | * `rebalanceTimeout`
+-- |   * The maximum time that the coordinator will wait for each member to rejoin when rebalancing the group
+-- |   * default: `Milliseconds 60000` (1 minute)
+-- | * `sessionTimeout`
+-- |   * Timeout in milliseconds used to detect failures. The consumer sends periodic heartbeats to indicate its liveness to the broker. If no heartbeats are received by the broker before the expiration of this session timeout, then the broker will remove this consumer from the group and initiate a rebalance
+-- |   * default: `Milliseconds 30000` (30 seconds)
 type ConsumerConfig =
-  { groupId :: String }
+  { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
+  , groupId :: String
+  , heartbeatInterval :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , maxBytes :: Data.Maybe.Maybe Number
+  , maxBytesPerPartition :: Data.Maybe.Maybe Number
+  , maxInFlightRequests :: Data.Maybe.Maybe Int
+  , maxWaitTime :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , minBytes :: Data.Maybe.Maybe Number
+  , readUncommitted :: Data.Maybe.Maybe Boolean
+  , rebalanceTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  , sessionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
+  }
 
 type ConsumerCrashEvent =
   { error :: Effect.Aff.Error
@@ -258,7 +305,25 @@ consumer kafka config =
     $ toConsumerConfigImpl config
   where
   toConsumerConfigImpl :: ConsumerConfig -> Kafka.FFI.Consumer.ConsumerConfigImpl
-  toConsumerConfigImpl x = x
+  toConsumerConfigImpl x = Kafka.FFI.objectFromRecord
+    { allowAutoTopicCreation: x.allowAutoTopicCreation
+    , groupId: x.groupId
+    , heartbeatInterval: x.heartbeatInterval <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , maxBytes: x.maxBytes
+    , maxBytesPerPartition: x.maxBytesPerPartition
+    , maxInFlightRequests: x.maxInFlightRequests
+    , maxWaitTimeInMs: x.maxWaitTime <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , metadataMaxAge: x.metadataMaxAge <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , minBytes: x.minBytes
+    , readUncommitted: x.readUncommitted
+    , rebalanceTimeout: x.rebalanceTimeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    , sessionTimeout: x.sessionTimeout <#> case _ of
+        Data.Time.Duration.Milliseconds ms -> ms
+    }
 
 disconnect :: Kafka.FFI.Consumer.Consumer -> Effect.Aff.Aff Unit
 disconnect consumer' =

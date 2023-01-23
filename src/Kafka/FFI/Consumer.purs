@@ -82,7 +82,7 @@ foreign import data Consumer :: Type
 -- | Required
 -- | * `groupId: string`
 -- |
--- | Unsupported
+-- | Optional
 -- | * `allowAutoTopicCreation?: boolean`
 -- | * `heartbeatInterval?: number`
 -- | * `maxBytes?: number`
@@ -91,14 +91,30 @@ foreign import data Consumer :: Type
 -- | * `maxWaitTimeInMs?: number`
 -- | * `metadataMaxAge?: number`
 -- | * `minBytes?: number`
--- | * `partitionAssigners?: PartitionAssigner[]`
--- | * `rackId?: string`
 -- | * `readUncommitted?: boolean`
 -- | * `rebalanceTimeout?: number`
--- | * `retry?: RetryOptions & { restartOnFailure?: (err: Error) => Promise<boolean> }`
 -- | * `sessionTimeout?: number`
+-- |
+-- | Unsupported
+-- | * `partitionAssigners?: PartitionAssigner[]`
+-- | * `rackId?: string`
+-- | * `retry?: RetryOptions & { restartOnFailure?: (err: Error) => Promise<boolean> }`
 type ConsumerConfigImpl =
-  { groupId :: String }
+  Kafka.FFI.Object
+    ( groupId :: String
+    )
+    ( allowAutoTopicCreation :: Boolean
+    , heartbeatInterval :: Number
+    , maxBytes :: Number
+    , maxBytesPerPartition :: Number
+    , maxInFlightRequests :: Int
+    , maxWaitTimeInMs :: Number
+    , metadataMaxAge :: Number
+    , minBytes :: Number
+    , readUncommitted :: Boolean
+    , rebalanceTimeout :: Number
+    , sessionTimeout :: Number
+    )
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L960
 -- |
