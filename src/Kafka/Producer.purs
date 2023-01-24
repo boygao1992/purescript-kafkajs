@@ -1,7 +1,9 @@
 module Kafka.Producer
   ( Acks(..)
   , CompressionType(..)
+  , CustomPartitioner
   , Message
+  , PartitionerArgs
   , ProducerBatch
   , ProducerConfig
   , ProducerRecord
@@ -20,6 +22,7 @@ import Prelude
 import Control.Promise as Control.Promise
 import Data.Array as Data.Array
 import Data.DateTime.Instant as Data.DateTime.Instant
+import Data.Either as Data.Either
 import Data.Maybe as Data.Maybe
 import Data.Nullable as Data.Nullable
 import Data.Time.Duration as Data.Time.Duration
@@ -27,6 +30,7 @@ import Effect as Effect
 import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
 import Kafka.FFI as Kafka.FFI
+import Kafka.FFI.Buffer as Kafka.FFI.Buffer
 import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Kafka.FFI.Producer as Kafka.FFI.Producer
 import Kafka.Type as Kafka.Type
@@ -71,6 +75,9 @@ data CompressionType
 derive instance eqCompressionType :: Eq CompressionType
 derive instance ordCompressionType :: Ord CompressionType
 
+type CustomPartitioner =
+  PartitionerArgs -> Effect.Effect { partition :: Int }
+
 -- | see [Message structure](https://kafka.js.org/docs/producing#message-structure)
 -- |
 -- | * `headers`
@@ -90,6 +97,12 @@ type Message =
   , partition :: Data.Maybe.Maybe Int
   , timestamp :: Data.Maybe.Maybe Data.DateTime.Instant.Instant
   , value :: Data.Maybe.Maybe Value
+  }
+
+type PartitionerArgs =
+  { message :: Message
+  , partitionMetadata :: Array Kafka.Type.PartitionMetadata
+  , topic :: String
   }
 
 -- | * `acks`
@@ -115,6 +128,8 @@ type ProducerBatch =
 -- | * `allowAutoTopicCreation`
 -- |   * Allow topic creation when querying metadata for non-existent topics
 -- |   * default: `true`
+-- | * `createPartitioner`
+-- |   * see [Custom Partitioner](https://kafka.js.org/docs/producing#a-name-custom-partitioner-a-custom-partitioner)
 -- | * `idempotent`
 -- |   * If enabled producer will ensure each message is written exactly once. Acks must be set to `AcksAll`. Retries will default to `MAX_SAFE_INTEGER`.
 -- |   * default: `false`
@@ -132,6 +147,7 @@ type ProducerBatch =
 -- |   * see [Choosing a `transactionalId`](https://kafka.js.org/docs/transactions#choosing-a-transactionalid)
 type ProducerConfig =
   { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
+  , createPartitioner :: Data.Maybe.Maybe CustomPartitioner
   , idempotent :: Data.Maybe.Maybe Boolean
   , maxInFlightRequests :: Data.Maybe.Maybe Int
   , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
@@ -207,9 +223,40 @@ producer kafka config =
   Effect.Uncurried.runEffectFn2 Kafka.FFI.Producer._producer kafka
     $ toProducerConfigImpl config
   where
+  fromMessageImpl :: Kafka.FFI.Producer.MessageImpl -> Message
+  fromMessageImpl x =
+    let
+      y = Kafka.FFI.objectToRecord x
+    in
+      y
+        { key = fromValueImpl <$> y.key
+        , timestamp = do
+            timestamp <- y.timestamp
+            Data.DateTime.Instant.instant
+              $ Data.Time.Duration.Milliseconds timestamp
+        , value = fromValueImpl <$> Data.Nullable.toMaybe y.value
+        }
+
+  fromPartitionerArgsImpl :: Kafka.FFI.Producer.PartitionerArgsImpl -> PartitionerArgs
+  fromPartitionerArgsImpl x =
+    { message: fromMessageImpl x.message
+    , partitionMetadata: Kafka.Type.fromPartitionMetadataImpl <$> x.partitionMetadata
+    , topic: x.topic
+    }
+
+  fromValueImpl :: Kafka.FFI.Producer.ValueImpl -> Value
+  fromValueImpl x = case Untagged.Union.toEither1 x of
+    Data.Either.Left (Kafka.FFI.Buffer.Buffer buffer) -> Buffer buffer
+    Data.Either.Right string -> String string
+
   toProducerConfigImpl :: ProducerConfig -> Kafka.FFI.Producer.ProducerConfigImpl
   toProducerConfigImpl x = Kafka.FFI.objectFromRecord
     { allowAutoTopicCreation: x.allowAutoTopicCreation
+    , createPartitioner: x.createPartitioner <#> \createPartitioner ->
+        \_ -> Effect.Uncurried.mkEffectFn1 \partitionerArgsImpl -> do
+          { partition } <- createPartitioner
+            $ fromPartitionerArgsImpl partitionerArgsImpl
+          pure partition
     , idempotent: x.idempotent
     , maxInFlightRequests: x.maxInFlightRequests
     , metadataMaxAge: x.metadataMaxAge <#> case _ of
@@ -300,6 +347,6 @@ sendBatch producer' producerBatch = do
 
   toValueImpl :: Value -> Kafka.FFI.Producer.ValueImpl
   toValueImpl value = case value of
-    Buffer buffer -> Untagged.Union.asOneOf buffer
+    Buffer buffer -> Untagged.Union.asOneOf (Kafka.FFI.Buffer.Buffer buffer)
     String string -> Untagged.Union.asOneOf string
 

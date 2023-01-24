@@ -1,7 +1,9 @@
 module Kafka.FFI.Producer
   ( AcksImpl
   , CompressionTypeImpl
+  , CustomPartitionerImpl
   , MessageImpl
+  , PartitionerArgsImpl
   , Producer
   , ProducerBatchImpl
   , ProducerConfigImpl
@@ -20,9 +22,9 @@ import Control.Promise as Control.Promise
 import Data.Nullable as Data.Nullable
 import Effect.Uncurried as Effect.Uncurried
 import Kafka.FFI as Kafka.FFI
+import Kafka.FFI.Buffer as Kafka.FFI.Buffer
 import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Kafka.Type as Kafka.Type
-import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
 
 type AcksImpl = Int
@@ -33,6 +35,15 @@ type AcksImpl = Int
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/src/protocol/message/compression/index.js#L5
 -- | `Compression.Types`
 type CompressionTypeImpl = Int
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L123
+-- |
+-- | `type ICustomPartitioner = () => (args: PartitionerArgs) => number`
+type CustomPartitionerImpl =
+  Unit ->
+  Effect.Uncurried.EffectFn1
+    PartitionerArgsImpl
+    Int
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L109
 -- |
@@ -57,6 +68,17 @@ type MessageImpl =
     , timestamp :: Number
     )
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L117
+-- |
+-- | * `message: Message`
+-- | * `partitionMetadata: PartitionMetadata[]`
+-- | * `topic: string`
+type PartitionerArgsImpl =
+  { message :: MessageImpl
+  , partitionMetadata :: Array Kafka.Type.PartitionMetadataImpl
+  , topic :: String
+  }
+
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L753
 -- |
 -- | Optional
@@ -77,6 +99,7 @@ type ProducerBatchImpl =
 -- |
 -- | Optional
 -- | * `allowAutoTopicCreation?: boolean`
+-- | * `createPartitioner?: ICustomPartitioner`
 -- | * `idempotent?: boolean`
 -- | * `maxInFlightRequests?: number`
 -- | * `metadataMaxAge?: number`
@@ -84,12 +107,12 @@ type ProducerBatchImpl =
 -- | * `transactionalId?: string`
 -- |
 -- | Unsupported
--- | * `createPartitioner?: ICustomPartitioner`
 -- | * `retry?: RetryOptions`
 type ProducerConfigImpl =
   Kafka.FFI.Object
     ()
     ( allowAutoTopicCreation :: Boolean
+    , createPartitioner :: CustomPartitionerImpl
     , idempotent :: Boolean
     , maxInFlightRequests :: Int
     , metadataMaxAge :: Number
@@ -137,7 +160,7 @@ type TopicMessagesImpl =
   }
 
 type ValueImpl =
-  Node.Buffer.Buffer
+  Kafka.FFI.Buffer.Buffer
     Untagged.Union.|+| String
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L787

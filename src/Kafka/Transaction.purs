@@ -46,6 +46,7 @@ type ProducerBatch =
 -- | see [Transactions](https://kafka.js.org/docs/transactions)
 type ProducerConfig =
   { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
+  , createPartitioner :: Data.Maybe.Maybe Kafka.Producer.CustomPartitioner
   , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , transactionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , transactionalId :: String

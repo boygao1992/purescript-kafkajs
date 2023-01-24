@@ -225,6 +225,7 @@ testConsumerSeekWithTwoPartitions =
     producer <- Effect.Class.liftEffect $
       Kafka.Producer.producer kafka
         { allowAutoTopicCreation: Data.Maybe.Just false
+        , createPartitioner: Data.Maybe.Nothing
         , idempotent: Data.Maybe.Nothing
         , maxInFlightRequests: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
@@ -350,6 +351,7 @@ testProduceConsumeRoundtrip = do
     producer <- Effect.Class.liftEffect $
       Kafka.Producer.producer kafka
         { allowAutoTopicCreation: Data.Maybe.Just false
+        , createPartitioner: Data.Maybe.Nothing
         , idempotent: Data.Maybe.Nothing
         , maxInFlightRequests: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
