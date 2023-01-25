@@ -178,12 +178,12 @@ type ConsumerConfig =
   { allowAutoTopicCreation :: Data.Maybe.Maybe Boolean
   , groupId :: String
   , heartbeatInterval :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
-  , maxBytes :: Data.Maybe.Maybe Number
-  , maxBytesPerPartition :: Data.Maybe.Maybe Number
+  , maxBytes :: Data.Maybe.Maybe Int
+  , maxBytesPerPartition :: Data.Maybe.Maybe Int
   , maxInFlightRequests :: Data.Maybe.Maybe Int
   , maxWaitTime :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
-  , minBytes :: Data.Maybe.Maybe Number
+  , minBytes :: Data.Maybe.Maybe Int
   , partitionAssigners :: Data.Maybe.Maybe (Array PartitionAssigner)
   , readUncommitted :: Data.Maybe.Maybe Boolean
   , rebalanceTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds

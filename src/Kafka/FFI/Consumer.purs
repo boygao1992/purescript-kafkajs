@@ -172,12 +172,12 @@ type ConsumerConfigImpl =
     )
     ( allowAutoTopicCreation :: Boolean
     , heartbeatInterval :: Number
-    , maxBytes :: Number
-    , maxBytesPerPartition :: Number
+    , maxBytes :: Int
+    , maxBytesPerPartition :: Int
     , maxInFlightRequests :: Int
     , maxWaitTimeInMs :: Number
     , metadataMaxAge :: Number
-    , minBytes :: Number
+    , minBytes :: Int
     , partitionAssigners :: Array PartitionAssignerImpl
     , readUncommitted :: Boolean
     , rebalanceTimeout :: Number
