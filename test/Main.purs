@@ -259,6 +259,7 @@ testConsumerSeekWithTwoPartitions =
         , maxWaitTime: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
         , minBytes: Data.Maybe.Nothing
+        , partitionAssigners: Data.Maybe.Nothing
         , readUncommitted: Data.Maybe.Nothing
         , rebalanceTimeout: Data.Maybe.Nothing
         , sessionTimeout: Data.Maybe.Nothing
@@ -385,6 +386,7 @@ testProduceConsumeRoundtrip = do
         , maxWaitTime: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
         , minBytes: Data.Maybe.Nothing
+        , partitionAssigners: Data.Maybe.Nothing
         , readUncommitted: Data.Maybe.Nothing
         , rebalanceTimeout: Data.Maybe.Nothing
         , sessionTimeout: Data.Maybe.Nothing

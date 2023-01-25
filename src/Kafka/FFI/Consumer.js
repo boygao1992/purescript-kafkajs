@@ -1,5 +1,7 @@
 "use strict";
 
+const kafkajs = require('kafkajs');
+
 exports._connect = function _connect(consumer) {
   return consumer.connect();
 };
@@ -31,3 +33,5 @@ exports._seek = function _seek(consumer, topicPartitionOffset) {
 exports._subscribe = function _subscribe(consumer, subscription) {
   return consumer.subscribe(subscription);
 };
+
+exports.roundRobin = kafkajs.PartitionAssigners.roundRobin;

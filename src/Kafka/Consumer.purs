@@ -1,5 +1,8 @@
 module Kafka.Consumer
-  ( Batch
+  ( Assigner
+  , AssignerAssignGroup
+  , Batch
+  , Cluster
   , Consume(..)
   , ConsumerConfig
   , ConsumerCrashEvent
@@ -12,14 +15,23 @@ module Kafka.Consumer
   , EachBatchPayload
   , EachMessageHandler
   , EachMessagePayload
+  , GroupMember
+  , GroupMemberAssignment
+  , GroupState
   , KafkaMessage
   , Offsets
+  , MemberAssignment
+  , MemberMetadata
+  , PartitionAssigner(..)
+  , PartitionAssignerConfig
+  , PartitionAssignerCustom
   , Topic(..)
   , connect
   , consumer
   , disconnect
   , onCrash
   , onGroupJoin
+  , roundRobin
   , run
   , seek
   , subscribe
@@ -28,6 +40,7 @@ module Kafka.Consumer
 import Prelude
 
 import Control.Promise as Control.Promise
+import Data.Array as Data.Array
 import Data.Maybe as Data.Maybe
 import Data.Nullable as Data.Nullable
 import Data.String.Regex as Data.String.Regex
@@ -37,11 +50,35 @@ import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
 import Foreign.Object as Foreign.Object
 import Kafka.FFI as Kafka.FFI
+import Kafka.FFI.AssignerProtocol as Kafka.FFI.AssignerProtocol
 import Kafka.FFI.Consumer as Kafka.FFI.Consumer
 import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
+
+-- | * `assign`
+-- |   * builds an assignment plan with partitions per topic
+-- | * `name`
+-- |   * assigner/protocol name
+-- | * `protocol`
+-- |   * builds metadata for the Consumer Group which is accessible through `Admin.describeGroups` or `Consumer.describeGroup`
+-- | * `version`
+type Assigner =
+  { assign ::
+      AssignerAssignGroup ->
+      Effect.Aff.Aff (Array GroupMemberAssignment)
+  , name :: String
+  , protocol ::
+      { topics :: Array String } ->
+      Effect.Effect GroupState
+  , version :: Int
+  }
+
+type AssignerAssignGroup =
+  { members :: Array GroupMember
+  , topics :: Array String
+  }
 
 -- | see comments in https://github.com/tulios/kafkajs/blob/v2.2.3/src/consumer/batch.js
 -- |
@@ -74,6 +111,14 @@ type Batch =
   , offsetLagLow :: Effect.Effect String
   , partition :: Int
   , topic :: String
+  }
+
+-- | * `findTopicPartitionMetadata`
+-- |   * returns the partition metadata of a topic
+type Cluster =
+  { findTopicPartitionMetadata ::
+      { topic :: String } ->
+      Effect.Effect (Array Kafka.Type.PartitionMetadata)
   }
 
 -- | * `EachBatch`
@@ -116,6 +161,10 @@ data Consume
 -- | * `minBytes`
 -- |   * Minimum amount of data the server should return for a fetch request, otherwise wait up to `maxWaitTime` for more data to accumulate.
 -- |   * default: `1`
+-- | * `partitionAssigners`
+-- |   * list of partition assigners
+-- |   * default: `[ roundRobin ]`
+-- |   * see [Custom partition assigner](https://kafka.js.org/docs/consuming#a-name-custom-partition-assigner-a-custom-partition-assigner)
 -- | * `readUncommitted`
 -- |   * Configures the consumer isolation level. If `false` (default), the consumer will not return any transactional messages which were not committed.
 -- |   * default: `false`
@@ -135,6 +184,7 @@ type ConsumerConfig =
   , maxWaitTime :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , metadataMaxAge :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , minBytes :: Data.Maybe.Maybe Number
+  , partitionAssigners :: Data.Maybe.Maybe (Array PartitionAssigner)
   , readUncommitted :: Data.Maybe.Maybe Boolean
   , rebalanceTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
   , sessionTimeout :: Data.Maybe.Maybe Data.Time.Duration.Milliseconds
@@ -271,6 +321,21 @@ type EachMessagePayload =
   , topic :: String
   }
 
+type GroupMember =
+  { memberId :: String
+  , memberMetadata :: MemberMetadata
+  }
+
+type GroupMemberAssignment =
+  { memberAssignment :: MemberAssignment
+  , memberId :: String
+  }
+
+type GroupState =
+  { metadata :: MemberMetadata
+  , name :: String
+  }
+
 -- | * `headers`
 -- | * `key`
 -- | * `offset`
@@ -286,9 +351,38 @@ type KafkaMessage =
   , value :: Data.Maybe.Maybe Node.Buffer.Buffer
   }
 
+type MemberAssignment =
+  { assignment :: Kafka.FFI.AssignerProtocol.Assignment
+  , userData :: Data.Maybe.Maybe Node.Buffer.Buffer
+  , version :: Int
+  }
+
+type MemberMetadata =
+  { topics :: Array String
+  , userData :: Data.Maybe.Maybe Node.Buffer.Buffer
+  , version :: Int
+  }
+
 type Offsets =
   { topics :: Array Kafka.FFI.Consumer.TopicOffsets
   }
+
+-- | * `PartitionAssignerCustom`
+-- |   * PS version which is easier to work with and will be converted to FFI
+-- | * `PartitionAssignerNative`
+-- |   * FFI version
+data PartitionAssigner
+  = PartitionAssignerCustom PartitionAssignerCustom
+  | PartitionAssignerNative Kafka.FFI.Consumer.PartitionAssignerImpl
+
+type PartitionAssignerConfig =
+  { cluster :: Cluster
+  , groupId :: String
+  }
+
+type PartitionAssignerCustom =
+  PartitionAssignerConfig ->
+  Assigner
 
 data Topic
   = TopicName String
@@ -304,6 +398,52 @@ consumer kafka config =
   Effect.Uncurried.runEffectFn2 Kafka.FFI.Consumer._consumer kafka
     $ toConsumerConfigImpl config
   where
+  fromAssignerAssignGroupImpl ::
+    Kafka.FFI.Consumer.AssignerAssignGroupImpl ->
+    AssignerAssignGroup
+  fromAssignerAssignGroupImpl x =
+    x
+      { members = Data.Array.mapMaybe fromGroupMemberImpl x.members
+      }
+
+  fromClusterImpl :: Kafka.FFI.Consumer.ClusterImpl -> Cluster
+  fromClusterImpl x =
+    { findTopicPartitionMetadata: \({ topic }) -> do
+        partitionMetadataImpls <-
+          Effect.Uncurried.runEffectFn1 x.findTopicPartitionMetadata topic
+        pure
+          $ map Kafka.Type.fromPartitionMetadataImpl
+          $ partitionMetadataImpls
+    }
+
+  fromGroupMemberImpl ::
+    Kafka.FFI.Consumer.GroupMemberImpl ->
+    Data.Maybe.Maybe GroupMember
+  fromGroupMemberImpl x = do
+    memberMetadata <- Kafka.FFI.AssignerProtocol.memberMetadataDecode x.memberMetadata
+    pure x { memberMetadata = Kafka.FFI.objectToRecord memberMetadata }
+
+  fromPartitionAssignerConfigImpl ::
+    Kafka.FFI.Consumer.PartitionAssignerConfigImpl ->
+    PartitionAssignerConfig
+  fromPartitionAssignerConfigImpl x =
+    x { cluster = fromClusterImpl x.cluster }
+
+  toAssignerImpl :: Assigner -> Kafka.FFI.Consumer.AssignerImpl
+  toAssignerImpl x =
+    x
+      { assign = Effect.Uncurried.mkEffectFn1 \assignerAssignGroupImpl -> do
+          Control.Promise.fromAff do
+            groupMemberAssignments <- x.assign
+              $ fromAssignerAssignGroupImpl assignerAssignGroupImpl
+            pure
+              $ map toGroupMemberAssignmentImpl
+              $ groupMemberAssignments
+      , protocol = Effect.Uncurried.mkEffectFn1 \topics -> do
+          groupState <- x.protocol topics
+          pure $ toGroupStateImpl groupState
+      }
+
   toConsumerConfigImpl :: ConsumerConfig -> Kafka.FFI.Consumer.ConsumerConfigImpl
   toConsumerConfigImpl x = Kafka.FFI.objectFromRecord
     { allowAutoTopicCreation: x.allowAutoTopicCreation
@@ -318,12 +458,40 @@ consumer kafka config =
     , metadataMaxAge: x.metadataMaxAge <#> case _ of
         Data.Time.Duration.Milliseconds ms -> ms
     , minBytes: x.minBytes
+    , partitionAssigners: x.partitionAssigners <#> \partitionAssigners ->
+        partitionAssigners <#> case _ of
+          PartitionAssignerCustom f -> toPartitionAssignerImpl f
+          PartitionAssignerNative f -> f
     , readUncommitted: x.readUncommitted
     , rebalanceTimeout: x.rebalanceTimeout <#> case _ of
         Data.Time.Duration.Milliseconds ms -> ms
     , sessionTimeout: x.sessionTimeout <#> case _ of
         Data.Time.Duration.Milliseconds ms -> ms
     }
+
+  toGroupMemberAssignmentImpl ::
+    GroupMemberAssignment ->
+    Kafka.FFI.Consumer.GroupMemberAssignmentImpl
+  toGroupMemberAssignmentImpl x =
+    x
+      { memberAssignment =
+          Kafka.FFI.AssignerProtocol.memberAssignmentEncode
+            $ Kafka.FFI.objectFromRecord x.memberAssignment
+      }
+
+  toGroupStateImpl :: GroupState -> Kafka.FFI.Consumer.GroupStateImpl
+  toGroupStateImpl x =
+    x
+      { metadata =
+          Kafka.FFI.AssignerProtocol.memberMetadataEncode
+            $ Kafka.FFI.objectFromRecord x.metadata
+      }
+
+  toPartitionAssignerImpl :: PartitionAssignerCustom -> Kafka.FFI.Consumer.PartitionAssignerImpl
+  toPartitionAssignerImpl partitionAssignerCustom partitionAssignerConfigImpl =
+    toAssignerImpl
+      $ partitionAssignerCustom
+      $ fromPartitionAssignerConfigImpl partitionAssignerConfigImpl
 
 disconnect :: Kafka.FFI.Consumer.Consumer -> Effect.Aff.Aff Unit
 disconnect consumer' =
@@ -381,6 +549,10 @@ onGroupJoin consumer' consumerGroupJoinEventListener = do
     Effect.Uncurried.mkEffectFn1 \eventImpl ->
       listener
         $ fromConsumerGropuJoinEventImpl eventImpl
+
+-- | Default partition assigner from `kafkajs`
+roundRobin :: PartitionAssigner
+roundRobin = PartitionAssignerNative Kafka.FFI.Consumer.roundRobin
 
 run ::
   Kafka.FFI.Consumer.Consumer ->

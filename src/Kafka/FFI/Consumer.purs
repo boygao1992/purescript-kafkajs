@@ -1,5 +1,8 @@
 module Kafka.FFI.Consumer
-  ( BatchImpl
+  ( AssignerAssignGroupImpl
+  , AssignerImpl
+  , BatchImpl
+  , ClusterImpl
   , Consumer
   , ConsumerConfigImpl
   , ConsumerCrashEventImpl
@@ -14,10 +17,15 @@ module Kafka.FFI.Consumer
   , EachBatchPayloadImpl
   , EachMessageHandlerImpl
   , EachMessagePayloadImpl
+  , GroupMemberAssignmentImpl
+  , GroupMemberImpl
+  , GroupStateImpl
   , InstrumentationEventImpl
   , KafkaMessageImpl
   , OffsetsByTopicParition
   , OffsetsImpl
+  , PartitionAssignerImpl
+  , PartitionAssignerConfigImpl
   , PartitionOffset
   , RemoveInstrumentationEventListener
   , TopicOffsets
@@ -30,6 +38,7 @@ module Kafka.FFI.Consumer
   , _run
   , _seek
   , _subscribe
+  , roundRobin
   ) where
 
 import Prelude
@@ -42,10 +51,39 @@ import Effect.Aff as Effect.Aff
 import Effect.Uncurried as Effect.Uncurried
 import Foreign.Object as Foreign.Object
 import Kafka.FFI as Kafka.FFI
+import Kafka.FFI.AssignerProtocol as Kafka.FFI.AssignerProtocol
 import Kafka.FFI.Kafka as Kafka.FFI.Kafka
 import Kafka.Type as Kafka.Type
 import Node.Buffer as Node.Buffer
 import Untagged.Union as Untagged.Union
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L221
+-- |
+-- | * `assign(group: { members: GroupMember[]; topics: string[] }): Promise<GroupMemberAssignment[]>`
+-- | * `name: string`
+-- | * `protocol(subscription: { topics: string[] }): GroupState`
+-- | * `version: number`
+type AssignerImpl =
+  { assign ::
+      Effect.Uncurried.EffectFn1
+        AssignerAssignGroupImpl
+        (Control.Promise.Promise (Array GroupMemberAssignmentImpl))
+  , name :: String
+  , protocol ::
+      Effect.Uncurried.EffectFn1
+        { topics :: Array String }
+        GroupStateImpl
+  , version :: Int
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L224
+-- |
+-- | * `members: GroupMember[]`
+-- | * `topics: string[]`
+type AssignerAssignGroupImpl =
+  { members :: Array GroupMemberImpl
+  , topics :: Array String
+  }
 
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L876
 -- |
@@ -74,6 +112,35 @@ type BatchImpl =
   , topic :: String
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L185
+-- |
+-- | * `findTopicPartitionMetadata(topic: string): PartitionMetadata[]`
+-- |
+-- | Unsupported
+-- | * `addMultipleTargetTopics(topics: string[]): Promise<void>`
+-- | * `addTargetTopic(topic: string): Promise<void>`
+-- | * `connect(): Promise<void>`
+-- | * `defaultOffset(config: { fromBeginning: boolean }): number`
+-- | * `disconnect(): Promise<void>`
+-- | * `fetchTopicsOffset(topics: Array<...>): Promise<TopicOffsets[]>`
+-- | * `findBroker(node: { nodeId: string }): Promise<Broker>`
+-- | * `findControllerBroker(): Promise<Broker>`
+-- | * `findGroupCoordinator(group: { groupId: string }): Promise<Broker>`
+-- | * `findGroupCoordinatorMetadata(group: { groupId: string }): Promise<CoordinatorMetadata>`
+-- | * `findLeaderForPartitions(topic: string, partitions: number[]): { [leader: string]: number[] }`
+-- | * `getNodeIds(): number[]`
+-- | * `isConnected(): boolean`
+-- | * `metadata(): Promise<BrokerMetadata>`
+-- | * `refreshMetadata(): Promise<void>`
+-- | * `refreshMetadataIfNecessary(): Promise<void>`
+-- | * `removeBroker(options: { host: string; port: number }): void`
+type ClusterImpl =
+  { findTopicPartitionMetadata ::
+      Effect.Uncurried.EffectFn1
+        String
+        (Array Kafka.Type.PartitionMetadataImpl)
+  }
+
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L1032
 foreign import data Consumer :: Type
 
@@ -91,12 +158,12 @@ foreign import data Consumer :: Type
 -- | * `maxWaitTimeInMs?: number`
 -- | * `metadataMaxAge?: number`
 -- | * `minBytes?: number`
+-- | * `partitionAssigners?: PartitionAssigner[]`
 -- | * `readUncommitted?: boolean`
 -- | * `rebalanceTimeout?: number`
 -- | * `sessionTimeout?: number`
 -- |
 -- | Unsupported
--- | * `partitionAssigners?: PartitionAssigner[]`
 -- | * `rackId?: string`
 -- | * `retry?: RetryOptions & { restartOnFailure?: (err: Error) => Promise<boolean> }`
 type ConsumerConfigImpl =
@@ -111,6 +178,7 @@ type ConsumerConfigImpl =
     , maxWaitTimeInMs :: Number
     , metadataMaxAge :: Number
     , minBytes :: Number
+    , partitionAssigners :: Array PartitionAssignerImpl
     , readUncommitted :: Boolean
     , rebalanceTimeout :: Number
     , sessionTimeout :: Number
@@ -284,6 +352,32 @@ type EachMessagePayloadImpl =
   , topic :: String
   }
 
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L215
+-- |
+-- | * `memberId: string`
+-- | * `memberMetadata: Buffer`
+type GroupMemberImpl =
+  { memberId :: String
+  , memberMetadata :: Kafka.FFI.AssignerProtocol.MemberMetadataBuffer
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L217
+-- |
+-- | * `memberAssignment: Buffer`
+-- | * `memberId: string`
+type GroupMemberAssignmentImpl =
+  { memberAssignment :: Kafka.FFI.AssignerProtocol.MemberAssignmentBuffer
+  , memberId :: String
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L219
+-- | * `metadata: Buffer`
+-- | * `name: string`
+type GroupStateImpl =
+  { metadata :: Kafka.FFI.AssignerProtocol.MemberMetadataBuffer
+  , name :: String
+  }
+
 -- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L382
 -- |
 -- | `interface InstrumentationEvent<T>`
@@ -382,6 +476,23 @@ type OffsetsImpl =
 -- | `topics: TopicOffsets[]`
 type OffsetsByTopicParition =
   { topics :: Array TopicOffsets
+  }
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L170
+type PartitionAssignerImpl =
+  PartitionAssignerConfigImpl ->
+  AssignerImpl
+
+-- | https://github.com/tulios/kafkajs/blob/dcee6971c4a739ebb02d9279f68155e3945c50f7/types/index.d.ts#L170-L174
+-- |
+-- | * `cluster: Cluster`
+-- | * `groupId: string`
+-- |
+-- | Unsupported
+-- | * `logger: Logger`
+type PartitionAssignerConfigImpl =
+  { cluster :: ClusterImpl
+  , groupId :: String
   }
 
 -- | https://github.com/tulios/kafkajs/blob/d8fd93e7ce8e4675e3bb9b13d7a1e55a1e0f6bbf/types/index.d.ts#L650
@@ -501,3 +612,5 @@ foreign import _subscribe ::
     Consumer
     ConsumerSubscribeTopicsImpl
     (Control.Promise.Promise Unit)
+
+foreign import roundRobin :: PartitionAssignerImpl
