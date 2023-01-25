@@ -23,7 +23,6 @@ to generate this file without the comments in this block.
     , "foldable-traversable"
     , "foreign"
     , "foreign-object"
-    , "functions"
     , "integers"
     , "js-timers"
     , "maybe"

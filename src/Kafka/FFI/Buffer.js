@@ -1,6 +1,6 @@
 /* global Buffer */
 "use strict";
 
-exports._isBuffer = function _isBuffer(obj) {
+exports.isBuffer = function isBuffer(obj) {
   return Buffer.isBuffer(obj);
 };
