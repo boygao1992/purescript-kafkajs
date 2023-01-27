@@ -25,6 +25,18 @@ type MessageHeaders =
 type MessageHeadersImpl =
   Foreign.Object.Object String
 
+-- | * `isr`
+-- |   * in-sync replicas
+-- | * `leader`
+-- |   * leader replica
+-- | * `offlineReplicas`
+-- |   * offline replicas (not in-sync)
+-- | * `partitionErrorCode`
+-- |   * partition error code, or `0` if there was no error
+-- | * `partitionId`
+-- |   * partition ID
+-- | * `replicas`
+-- |   * all replicas (including both in-sync and offline)
 type PartitionMetadata =
   { isr :: Array Int
   , leader :: Int
