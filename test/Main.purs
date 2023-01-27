@@ -225,6 +225,7 @@ testConsumerSeekWithTwoPartitions =
     producer <- Effect.Class.liftEffect $
       Kafka.Producer.producer kafka
         { allowAutoTopicCreation: Data.Maybe.Just false
+        , createPartitioner: Data.Maybe.Nothing
         , idempotent: Data.Maybe.Nothing
         , maxInFlightRequests: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
@@ -249,7 +250,20 @@ testConsumerSeekWithTwoPartitions =
       Effect.Ref.new []
     consumer <- Effect.Class.liftEffect $
       Kafka.Consumer.consumer kafka
-        { groupId }
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , groupId
+        , heartbeatInterval: Data.Maybe.Nothing
+        , maxBytes: Data.Maybe.Nothing
+        , maxBytesPerPartition: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , maxWaitTime: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , minBytes: Data.Maybe.Nothing
+        , partitionAssigners: Data.Maybe.Nothing
+        , readUncommitted: Data.Maybe.Nothing
+        , rebalanceTimeout: Data.Maybe.Nothing
+        , sessionTimeout: Data.Maybe.Nothing
+        }
     Effect.Aff.bracket (Kafka.Consumer.connect consumer) (\_ -> Kafka.Consumer.disconnect consumer) \_ -> do
       Kafka.Consumer.subscribe consumer
         { fromBeginning: Data.Maybe.Just true
@@ -338,6 +352,7 @@ testProduceConsumeRoundtrip = do
     producer <- Effect.Class.liftEffect $
       Kafka.Producer.producer kafka
         { allowAutoTopicCreation: Data.Maybe.Just false
+        , createPartitioner: Data.Maybe.Nothing
         , idempotent: Data.Maybe.Nothing
         , maxInFlightRequests: Data.Maybe.Nothing
         , metadataMaxAge: Data.Maybe.Nothing
@@ -362,7 +377,20 @@ testProduceConsumeRoundtrip = do
       Effect.Ref.new []
     consumer <- Effect.Class.liftEffect $
       Kafka.Consumer.consumer kafka
-        { groupId }
+        { allowAutoTopicCreation: Data.Maybe.Just false
+        , groupId
+        , heartbeatInterval: Data.Maybe.Nothing
+        , maxBytes: Data.Maybe.Nothing
+        , maxBytesPerPartition: Data.Maybe.Nothing
+        , maxInFlightRequests: Data.Maybe.Nothing
+        , maxWaitTime: Data.Maybe.Nothing
+        , metadataMaxAge: Data.Maybe.Nothing
+        , minBytes: Data.Maybe.Nothing
+        , partitionAssigners: Data.Maybe.Nothing
+        , readUncommitted: Data.Maybe.Nothing
+        , rebalanceTimeout: Data.Maybe.Nothing
+        , sessionTimeout: Data.Maybe.Nothing
+        }
     Effect.Aff.bracket (Kafka.Consumer.connect consumer) (\_ -> Kafka.Consumer.disconnect consumer) \_ -> do
       Kafka.Consumer.subscribe consumer
         { fromBeginning: Data.Maybe.Just true
